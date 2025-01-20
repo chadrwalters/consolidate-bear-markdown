@@ -1,0 +1,1 @@
+# consolidate-bear-markdown
