@@ -64,6 +64,7 @@ repomix.config.json
 # Local development
 *.local
 *.local.*
+config.toml
 .local/
 
 # Temporary files
