@@ -1,0 +1,91 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+.env
+.venv
+.venv-mcp
+env/
+venv/
+ENV/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# Testing
+.coverage
+coverage.xml
+htmlcov/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.pdm-build/
+.benchmarks/
+
+# Nova specific
+logs/
+cache/
+output/
+.nova/
+*.log
+*.json
+config/nova.yaml
+.env
+_repomix-output.txt
+repomix.config.json
+
+# Jupyter Notebooks
+.ipynb_checkpoints
+*.ipynb
+
+# Local development
+*.local
+*.local.*
+.local/
+
+# Temporary files
+*.tmp
+*.temp
+.~*
+*~
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Chroma specific
+.chroma/
+vectors/
+
+# System specific
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Local environment overrides
+.env.local

@@ -1,0 +1,55 @@
+# Example configuration for consolidate-bear-markdown
+# Copy this file to config.toml and update with your settings
+
+#
+# Required Settings
+#
+
+# Source directory containing Bear.app notes
+# Can be a local path or cloud storage path
+srcDir = "~/Library/Group Containers/9K33E3U3T4.net.shinyfrog.bear/Application Data/Local Files/Note Files"
+
+# Destination directory for processed files
+destDir = "~/Documents/Bear Notes Processed"
+
+# OpenAI API key for GPT-4o image analysis
+# Get your key from: https://platform.openai.com/api-keys
+openai_key = "your-openai-api-key"
+
+#
+# Optional Settings
+#
+
+# Logging level (DEBUG, INFO, WARNING, ERROR)
+# Default: INFO
+logLevel = "INFO"
+
+# Directory for system files and processing
+# Default: .cbm
+cbm_dir = ".cbm"
+
+# Custom prompt for image analysis
+# Default: A general prompt for text extraction and formatting
+image_analysis_prompt = """
+Analyze the image and extract all visible text in the original language.
+Reproduce the extracted text in a structured Markdown format, preserving
+any formatting such as headings, bullet points, and highlights.
+
+Additional instructions:
+- Preserve text hierarchy and structure
+- Maintain original language and formatting
+- Include any visible metadata or annotations
+"""
+
+#
+# Cloud Storage Settings
+#
+
+# Example iCloud Drive path
+# srcDir = "~/Library/Mobile Documents/com~apple~CloudDocs/Bear Notes"
+
+# Example Google Drive path
+# srcDir = "~/Google Drive/Bear Notes"
+
+# Example Dropbox path
+# srcDir = "~/Dropbox/Bear Notes"

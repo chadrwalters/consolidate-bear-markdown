@@ -1,0 +1,8 @@
+markitdown>=1.0.0
+openai>=1.0.0
+tqdm>=4.65.0
+pytest>=7.4.0
+mypy>=1.5.1
+pillow>=10.0.0
+ruff>=0.1.0
+types-pillow>=10.0.0
