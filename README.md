@@ -6,11 +6,12 @@ A tool to process Bear.app markdown files and their attachments, using GPT-4o fo
 
 - Process Bear.app markdown files and inline attachments
 - Convert various file types to markdown using MarkItDown
-- High-quality SVG to PNG conversion using PyMuPDF
+- High-quality SVG to PNG conversion using Wand
 - Analyze images using GPT-4o vision model
 - Support for cloud storage paths (iCloud, Google Drive)
 - Configurable logging and error handling
 - Progress tracking and statistics
+- Efficient image caching system
 
 ## Installation
 

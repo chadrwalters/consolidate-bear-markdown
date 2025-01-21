@@ -75,6 +75,8 @@ For each markdown file:
 - Handles conversion of various file types to markdown
 - Manages conversion errors and fallbacks
 - Provides consistent output format
+- Uses Wand for high-quality SVG to PNG conversion
+- Implements efficient image caching to avoid redundant processing
 - Configures OpenAI client for GPT-4o image processing (only permitted vision model):
   ~~~~python
   from openai import OpenAI
@@ -82,7 +84,14 @@ For each markdown file:
   md = MarkItDown(llm_client=client, llm_model="gpt-4o")
   ~~~~
 
-### 1.5 Output Management
+### 1.5 Image Processing
+- SVG to PNG conversion using Wand library
+- Image caching system to store processed images
+- Configurable cache directory within .cbm
+- Automatic cache invalidation based on source file changes
+- Support for various image formats (SVG, PNG, JPG, etc.)
+
+### 1.6 Output Management
 - Creates .cbm directory for system files and logs
 - Creates destDir if needed
 - Maintains file naming consistency
@@ -105,10 +114,12 @@ For each markdown file:
  │      (Python program)         │
  │1. Read config                  │
  │2. Setup Logging                │
- │3. Gather .md files            │
- │4. For each .md:               │
+ │3. Initialize Image Cache       │
+ │4. Gather .md files            │
+ │5. For each .md:               │
  │   - detect references         │
  │   - MarkItDown attachments    │
+ │   - Process images (Wand)     │
  │   - inline output             │
  │   - Write new .md to destDir  │
  └─────────┬─────────────────────┘
@@ -130,8 +141,10 @@ For each markdown file:
    - UV for environment management
    - MarkItDown library
    - OpenAI GPT-4o for image analysis
+   - Wand for image processing
 
 2. **Key Dependencies**
+   - Wand for SVG/image conversion
    - tqdm for progress indication
    - Standard library components (os, pathlib, logging)
    - Configuration parser (TOML/YAML)

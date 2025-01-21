@@ -24,10 +24,12 @@ from bs4 import BeautifulSoup
 
 import fitz
 
-logger = logging.getLogger(__name__)
 # Configure OpenAI loggers to not show debug messages
 logging.getLogger("openai").setLevel(logging.INFO)
 logging.getLogger("openai._base_client").setLevel(logging.INFO)
+logging.getLogger("pdfminer.cmapdb").setLevel(logging.INFO)
+
+logger = logging.getLogger(__name__)
 
 class DocumentConverterResult(TypedDict, total=False):
     """Type hints for MarkItDown conversion result."""
@@ -61,15 +63,49 @@ class MarkItDownWrapper:
         self.temp_images = self.temp_dir / "temp_images"
         self.temp_images.mkdir(parents=True, exist_ok=True)
 
-    def convert_file(self, file_path: Path) -> Dict[str, Any]:
-        """Convert a file to markdown format.
+    def _handle_pdf_file(self, file_path: Path) -> DocumentConverterResult:
+        """Handle PDF file conversion using PyMuPDF."""
+        try:
+            # Open the PDF
+            doc = fitz.open(str(file_path))
+            text_content = []
 
-        Args:
-            file_path: Path to the file to convert
+            # Extract text from each page
+            for page in doc:
+                text_content.append(page.get_text())
 
-        Returns:
-            Dictionary containing the conversion results
-        """
+            # Close the document
+            doc.close()
+
+            return cast(DocumentConverterResult, {
+                "text_content": "\n\n".join(text_content),
+                "success": True,
+                "type": "pdf"
+            })
+        except Exception as e:
+            logger.error("Error converting PDF: %s", str(e))
+            return cast(DocumentConverterResult, {
+                "text_content": None,
+                "success": False,
+                "error": f"Error converting PDF: {str(e)}",
+                "type": "pdf"
+            })
+
+    def convert_file(self, file_path: Union[str, Path]) -> DocumentConverterResult:
+        """Convert a file to markdown format."""
+        file_path = Path(file_path)
+        if not file_path.exists():
+            return cast(DocumentConverterResult, {
+                "text_content": None,
+                "success": False,
+                "error": f"File not found: {file_path}",
+                "type": "unknown"
+            })
+
+        # Handle PDF files with PyMuPDF
+        if file_path.suffix.lower() == '.pdf':
+            return self._handle_pdf_file(file_path)
+
         try:
             logger.debug("Starting conversion for file: %s", file_path)
 
@@ -395,36 +431,119 @@ class MarkItDownWrapper:
                 "error": str(e)
             }
 
-    def _format_image_analysis(self, analysis: str, image_name: str) -> str:
-        """Format image analysis with consistent headers and structure.
+    def _get_file_emoji(self, file_type: str) -> str:
+        """Get emoji for file type.
 
         Args:
-            analysis: Raw analysis text
-            image_name: Name of the image file
+            file_type: Type of file (e.g., 'document', 'spreadsheet', 'image')
 
         Returns:
-            Formatted markdown content
+            Emoji string for the file type
         """
-        return (
-            f"### Image Analysis: {image_name}\n\n"
-            "#### Extracted Content\n\n"
-            f"{analysis}\n"
-        )
+        emoji_map = {
+            'document': '📄',
+            'spreadsheet': '📊',
+            'image': '🖼️',
+            'code': '��',
+            'pdf': '📑',
+            'text': '📝',
+            'html': '🌐',
+            'json': '📋'
+        }
+        return emoji_map.get(file_type, '📄')
+
+    def _get_file_type(self, file_path: Path) -> str:
+        """Determine file type from extension.
+
+        Args:
+            file_path: Path to the file
+
+        Returns:
+            File type string
+        """
+        ext = file_path.suffix.lower()
+        if ext in {'.jpg', '.jpeg', '.png', '.gif', '.webp', '.heic', '.heif', '.svg'}:
+            return 'image'
+        elif ext in {'.xlsx', '.csv'}:
+            return 'spreadsheet'
+        elif ext in {'.docx', '.doc', '.rtf'}:
+            return 'document'
+        elif ext == '.pdf':
+            return 'pdf'
+        elif ext == '.html':
+            return 'html'
+        elif ext == '.json':
+            return 'json'
+        elif ext == '.txt':
+            return 'text'
+        elif ext in {'.py', '.js', '.java', '.cpp'}:
+            return 'code'
+        return 'document'
 
     def _format_file_content(self, content: str, filename: str) -> str:
-        """Format file content for embedding.
+        """Format file content with improved readability.
 
         Args:
-            content: The file content to format
-            filename: Name of the file being processed
+            content: Raw content to format
+            filename: Name of the file
 
         Returns:
-            Formatted content ready for embedding
+            Formatted content string
         """
-        return (
-            f"### File Content: {filename}\n\n"
-            f"{content}\n"
-        )
+        file_path = Path(filename)
+        file_type = self._get_file_type(file_path)
+        emoji = self._get_file_emoji(file_type)
+
+        # Get file metadata
+        file_size = os.path.getsize(file_path) if os.path.exists(file_path) else 0
+        size_str = f"{file_size/1024:.1f}KB" if file_size > 0 else "unknown size"
+        mod_time = time.strftime('%b %d', time.localtime(os.path.getmtime(file_path))) if os.path.exists(file_path) else ""
+
+        # Format the content
+        formatted = f"""<!-- BEGIN EMBEDDED CONTENT -->
+<details class="embedded-content">
+<summary>{emoji} {filename} ({size_str}, modified {mod_time})</summary>
+
+{content}
+
+</details>
+<!-- END EMBEDDED CONTENT -->"""
+        return formatted
+
+    def _format_image_analysis(self, analysis: str, filename: str) -> str:
+        """Format image analysis with improved readability.
+
+        Args:
+            analysis: Image analysis text
+            filename: Name of the image file
+
+        Returns:
+            Formatted analysis string
+        """
+        file_path = Path(filename)
+
+        # Get image dimensions if possible
+        dimensions = ""
+        try:
+            with Image.open(file_path) as img:
+                dimensions = f"{img.width}x{img.height}, "
+        except:
+            pass
+
+        # Get file metadata
+        file_size = os.path.getsize(file_path) if os.path.exists(file_path) else 0
+        size_str = f"{file_size/1024:.1f}KB" if file_size > 0 else "unknown size"
+        mod_time = time.strftime('%b %d', time.localtime(os.path.getmtime(file_path))) if os.path.exists(file_path) else ""
+
+        formatted = f"""<!-- BEGIN EMBEDDED CONTENT -->
+<details class="embedded-content">
+<summary>🖼️ {filename} ({dimensions}{size_str}, modified {mod_time})</summary>
+
+{analysis}
+
+</details>
+<!-- END EMBEDDED CONTENT -->"""
+        return formatted
 
     def _format_error(self, error_type: str, message: str) -> Dict[str, Any]:
         """Format error messages consistently.
@@ -542,41 +661,26 @@ class MarkItDownWrapper:
             file_path: Path to the JSON file
 
         Returns:
-            Processed JSON content as markdown
+            Processed JSON content
         """
         try:
-            # Read and parse JSON
-            with open(file_path, 'r', encoding='utf-8') as f:
+            with open(file_path, 'r') as f:
                 data = json.load(f)
-
-            # Convert to pretty JSON string
-            pretty_json = json.dumps(data, indent=2)
-
-            # Format as markdown
-            content = (
-                f"### JSON Content: {file_path.name}\n\n"
-                "```json\n"
-                f"{pretty_json}\n"
-                "```\n"
-            )
-
-            return {
-                "success": True,
-                "content": content,
-                "type": "json"
-            }
-
+                # Pretty print the JSON with proper indentation
+                formatted_json = json.dumps(data, indent=2)
+                content = f"```json\n{formatted_json}\n```"
+                return {
+                    "success": True,
+                    "content": self._format_file_content(content, file_path.name),
+                    "type": "json"
+                }
         except json.JSONDecodeError as e:
-            logger.error("Invalid JSON in %s: %s", file_path.name, str(e))
-            return {
-                "success": False,
-                "error": f"Invalid JSON: {str(e)}",
-                "type": "json"
-            }
+            return self._format_error(
+                "json_parse_error",
+                f"Invalid JSON file: {str(e)}"
+            )
         except Exception as e:
-            logger.error("Error processing JSON file %s: %s", file_path.name, str(e))
-            return {
-                "success": False,
-                "error": str(e),
-                "type": "json"
-            }
+            return self._format_error(
+                "file_error",
+                f"Error reading JSON file: {str(e)}"
+            )
