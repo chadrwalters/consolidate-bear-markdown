@@ -6,6 +6,7 @@ A tool to process Bear.app markdown files and their attachments, using GPT-4o fo
 
 - Process Bear.app markdown files and inline attachments
 - Convert various file types to markdown using MarkItDown
+- High-quality SVG to PNG conversion using PyMuPDF
 - Analyze images using GPT-4o vision model
 - Support for cloud storage paths (iCloud, Google Drive)
 - Configurable logging and error handling
@@ -70,9 +71,10 @@ The tool will:
 1. Scan the source directory for markdown files
 2. Process any attachments found in the files
 3. Convert attachments to markdown where possible
-4. Analyze images using GPT-4o
-5. Generate processed files in the destination directory
-6. Provide statistics on the processing results
+4. Convert SVG files to high-quality PNG images
+5. Analyze images using GPT-4o
+6. Generate processed files in the destination directory
+7. Provide statistics on the processing results
 
 ## Development
 
@@ -107,6 +109,7 @@ The tool provides detailed error handling:
 - File not found errors
 - Unsupported file types
 - Image processing failures
+- SVG conversion issues
 - Configuration errors
 
 Errors are logged to `.cbm/consolidate-bear-markdown.log`

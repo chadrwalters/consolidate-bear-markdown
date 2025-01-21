@@ -1,30 +1,51 @@
 [project]
 name = "consolidate-bear-markdown"
 version = "0.1.0"
-description = "Tool to process Bear.app markdown files and inline attachments"
+description = "Consolidate Bear Markdown files into a single file"
 authors = [{ name = "Chad Walters", email = "chad.walters@gmail.com" }]
 dependencies = [
-  "markitdown",
-  "openai",
-  "tomli",
-  "tqdm",
-  "rich",
-  "pandas",
   "tabulate",             # Required for pandas markdown tables
   "pandas-stubs",         # Type stubs for pandas
-  "cairosvg",             # For SVG to PNG conversion
+  "pymupdf",              # For SVG to PNG conversion with high-quality output
   "beautifulsoup4",       # For HTML processing
   "types-beautifulsoup4", # Type stubs for beautifulsoup4
-  "pillow",               # For image processing
 ]
 requires-python = ">=3.11"
 
 [project.optional-dependencies]
-dev = ["pytest", "mypy", "black", "ruff"]
+dev = [
+  "pytest",
+  "pytest-cov",
+  "pytest-mock",
+  "pytest-timeout",
+  "pytest-xdist",
+  "pytest-env",
+  "pytest-randomly",
+  "pytest-sugar",
+  "pytest-clarity",
+  "pytest-picked",
+  "pytest-reportlog",
+  "pytest-html",
+  "pytest-metadata",
+  "pytest-rerunfailures",
+  "pytest-repeat",
+  "pytest-ordering",
+  "pytest-benchmark",
+  "pytest-profiling",
+  "pytest-memray",
+  "pytest-monitor",
+]
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.rye]
+managed = true
+dev-dependencies = []
+
+[tool.hatch.metadata]
+allow-direct-references = true
 
 [tool.hatch.build.targets.wheel]
 packages = ["src"]

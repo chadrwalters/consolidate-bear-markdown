@@ -2,6 +2,7 @@
 
 import base64
 import logging
+import os
 import time
 from pathlib import Path
 from typing import Any, Dict, Optional, List, Union, TypedDict, cast
@@ -9,9 +10,7 @@ import pandas as pd
 import xml.dom.minidom
 import shutil
 from PIL import Image
-from svglib.svglib import svg2rlg
-from reportlab.graphics import renderPM
-from bs4 import BeautifulSoup  # For HTML fallback processing
+import json
 
 from .image_cache import ImageCache
 from .image_converter import ImageConverter
@@ -21,6 +20,9 @@ from openai.types.chat import (
     ChatCompletionMessageParam
 )
 from markitdown import MarkItDown, UnsupportedFormatException  # type: ignore
+from bs4 import BeautifulSoup
+
+import fitz
 
 logger = logging.getLogger(__name__)
 # Configure OpenAI loggers to not show debug messages
@@ -54,6 +56,10 @@ class MarkItDownWrapper:
         self.image_converter = ImageConverter(cbm_dir=self.cbm_dir)
         self.markitdown = MarkItDown(llm_client=client, llm_model="gpt-4o")
         logger.debug("MarkItDownWrapper initialized with cbm_dir: %s", self.cbm_dir)
+        self.temp_dir = self.cbm_dir / "temp"
+        self.temp_dir.mkdir(parents=True, exist_ok=True)
+        self.temp_images = self.temp_dir / "temp_images"
+        self.temp_images.mkdir(parents=True, exist_ok=True)
 
     def convert_file(self, file_path: Path) -> Dict[str, Any]:
         """Convert a file to markdown format.
@@ -66,6 +72,11 @@ class MarkItDownWrapper:
         """
         try:
             logger.debug("Starting conversion for file: %s", file_path)
+
+            # Handle JSON files directly
+            if file_path.suffix.lower() == '.json':
+                logger.debug("Detected JSON file, using _handle_json_file")
+                return self._handle_json_file(file_path)
 
             # Handle image files separately for GPT-4o analysis
             image_extensions = {'.jpg', '.jpeg', '.png', '.gif', '.webp', '.heic', '.heif', '.svg'}
@@ -160,6 +171,13 @@ class MarkItDownWrapper:
         Returns:
             Processed image content
         """
+        # Check if file exists
+        if not file_path.exists():
+            return self._format_error(
+                "File not found",
+                f"Image file {file_path.name} does not exist"
+            )
+
         # Check cache
         if self.image_cache.is_processed(file_path):
             cached_path = self.image_cache.get_cached_path(file_path)
@@ -175,58 +193,83 @@ class MarkItDownWrapper:
                 }
 
         try:
-            # Convert SVG to PNG if needed
-            if file_path.suffix.lower() == '.svg':
-                # Create temp PNG file
-                png_path = self.cbm_dir / "temp_images" / f"{file_path.stem}.png"
-                png_path.parent.mkdir(parents=True, exist_ok=True)
-
-                # Convert SVG to PNG using svglib
-                drawing = svg2rlg(str(file_path))
-                if drawing is None:
+            # Handle SVG files
+            if file_path.suffix.lower() == ".svg":
+                # Convert SVG to PDF in memory
+                doc = fitz.Document(str(file_path))
+                if not doc:
                     return self._format_error(
-                        "Failed to convert SVG",
-                        f"Could not load SVG file {file_path.name}"
+                        "Failed to parse SVG file",
+                        "Failed to parse SVG file"
                     )
 
-                renderPM.drawToFile(drawing, str(png_path), fmt="PNG")
+                # Create PNG file path
+                png_path = self.temp_images / f"{file_path.stem}.png"
 
-                # Also save original SVG content for reference
-                svg_content = file_path.read_text()
-                pretty_xml = xml.dom.minidom.parseString(svg_content).toprettyxml(indent="  ")
+                # Convert to PNG with high resolution
+                page = doc.load_page(0)
+                pix = page.get_pixmap(alpha=True, dpi=300)
+                pix.save(str(png_path))
 
-                # Process the PNG
-                result = self.process_image(png_path)
+                # Save original SVG content for reference
+                with open(file_path, "r") as f:
+                    svg_content = f.read()
 
-                if result["success"]:
-                    # Add SVG source to the analysis
-                    analysis = (
-                        f"{result['text']}\n\n"
-                        "#### SVG Source\n\n"
-                        f"```xml\n{pretty_xml}\n```\n"
-                    )
-                    return {
-                        "success": True,
-                        "content": self._format_image_analysis(analysis, file_path.name),
-                        "type": "image"
-                    }
-                return result
+                # Process the converted PNG file
+                with open(png_path, "rb") as f:
+                    image_data = f.read()
+                    base64_image = base64.b64encode(image_data).decode()
+
+                # Get vision description
+                message: ChatCompletionMessageParam = {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": "Please describe this image."
+                        },
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:image/png;base64,{base64_image}"
+                            }
+                        }
+                    ]
+                }
+                response = self.client.chat.completions.create(
+                    model="gpt-4o",
+                    messages=[message],
+                    max_tokens=500
+                )
+                description = response.choices[0].message.content
+
+                # Return both the description and original SVG
+                return {
+                    "success": True,
+                    "content": self._format_image_analysis(
+                        f"{description}\n\n```svg\n{svg_content}\n```",
+                        file_path.name
+                    ),
+                    "type": "image"
+                }
 
             # For other image types, use standard conversion
             converted_path = self.image_converter.convert_if_needed(file_path)
             if not converted_path:
-                return self._format_error(
-                    "Failed to convert image",
-                    f"Could not convert {file_path.name}"
-                )
+                return {
+                    "success": False,
+                    "error": f"Could not convert {file_path.name}",
+                    "type": "image"
+                }
 
             # Process with GPT-4o
             result = self.process_image(converted_path)
             if not result["success"]:
-                return self._format_error(
-                    "Failed to process image",
-                    result.get("error", "Unknown error")
-                )
+                return {
+                    "success": False,
+                    "error": result.get("error", "Unknown error"),
+                    "type": "image"
+                }
 
             # Cache result
             self.image_cache.cache_image(file_path)
@@ -243,10 +286,11 @@ class MarkItDownWrapper:
 
         except Exception as e:
             logger.error(f"Failed to process image {file_path.name}: {e}")
-            return self._format_error(
-                "Failed to process image",
-                str(e)
-            )
+            return {
+                "success": False,
+                "error": str(e),
+                "type": "image"
+            }
 
     def process_markdown(self, content: str, processed_paths: Dict[str, Path]) -> str:
         """Process markdown content with processed attachment paths.
@@ -404,6 +448,18 @@ class MarkItDownWrapper:
         """Clean up resources."""
         self.image_cache.cleanup()
         self.image_converter.cleanup()
+        try:
+            if self.temp_images.exists():
+                for file in self.temp_images.iterdir():
+                    try:
+                        file.unlink()
+                    except Exception as e:
+                        logger.debug(f"Error deleting file {file}: {e}")
+                self.temp_images.rmdir()
+            if self.temp_dir.exists():
+                self.temp_dir.rmdir()
+        except Exception as e:
+            logger.debug(f"Error cleaning up temporary directory: {e}")
 
     def __del__(self) -> None:
         """Clean up on deletion."""
@@ -478,3 +534,49 @@ class MarkItDownWrapper:
                 f"Failed to read HTML {file_path.name}",
                 str(e)
             )
+
+    def _handle_json_file(self, file_path: Path) -> Dict[str, Any]:
+        """Handle JSON file conversion.
+
+        Args:
+            file_path: Path to the JSON file
+
+        Returns:
+            Processed JSON content as markdown
+        """
+        try:
+            # Read and parse JSON
+            with open(file_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+
+            # Convert to pretty JSON string
+            pretty_json = json.dumps(data, indent=2)
+
+            # Format as markdown
+            content = (
+                f"### JSON Content: {file_path.name}\n\n"
+                "```json\n"
+                f"{pretty_json}\n"
+                "```\n"
+            )
+
+            return {
+                "success": True,
+                "content": content,
+                "type": "json"
+            }
+
+        except json.JSONDecodeError as e:
+            logger.error("Invalid JSON in %s: %s", file_path.name, str(e))
+            return {
+                "success": False,
+                "error": f"Invalid JSON: {str(e)}",
+                "type": "json"
+            }
+        except Exception as e:
+            logger.error("Error processing JSON file %s: %s", file_path.name, str(e))
+            return {
+                "success": False,
+                "error": str(e),
+                "type": "json"
+            }

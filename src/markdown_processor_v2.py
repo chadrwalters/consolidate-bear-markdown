@@ -56,6 +56,19 @@ class MarkdownProcessorV2:
             Dictionary containing the processing results
         """
         logger.info("Converting attachment: %s", attachment_path.name)
+
+        # Check if file exists
+        if not attachment_path.exists():
+            error_msg = f"File not found: {attachment_path.name}"
+            logger.error(error_msg)
+            self.stats.record_error("file_not_found")
+            return {
+                "success": False,
+                "content": None,
+                "error": error_msg,
+                "error_type": "file_not_found"
+            }
+
         try:
             result = self.markitdown.convert_file(attachment_path)
             if not result["success"]:
@@ -65,7 +78,7 @@ class MarkdownProcessorV2:
                 self.stats.record_error(error_type)
                 return {
                     "success": False,
-                    "content": f"\n<!-- Error processing {attachment_path.name}: {error_msg} -->\n",
+                    "content": None,
                     "error": error_msg,
                     "error_type": error_type
                 }
@@ -78,7 +91,7 @@ class MarkdownProcessorV2:
             self.stats.record_error("system_error")
             return {
                 "success": False,
-                "content": f"\n<!-- Error processing {attachment_path.name}: {str(e)} -->\n",
+                "content": None,
                 "error": str(e),
                 "error_type": "system_error"
             }
@@ -104,20 +117,21 @@ class MarkdownProcessorV2:
             references = find_markdown_references(content)
 
             for ref in references:
+                # Skip non-embedded references (including images with embed=false)
                 if not ref.embed:
                     stats["skipped"] += 1
                     continue
 
                 if not md_file.attachment_dir:
                     logger.warning("Missing attachment directory for file: %s", md_file.md_path)
-                    stats["missing"] += 1
+                    stats["skipped"] += 1
                     continue
 
                 # Get the attachment using the reference path
                 attachment_path = md_file.get_attachment(ref.link_path)
                 if not attachment_path:
                     logger.warning("Missing attachment: %s referenced in %s", ref.link_path, md_file.md_path)
-                    stats["missing"] += 1
+                    stats["skipped"] += 1
                     continue
 
                 # Normalize the attachment path
@@ -138,7 +152,7 @@ class MarkdownProcessorV2:
                     stats["success"] += 1
                 else:
                     stats["error"] += 1
-                    error_block = f"\n\n<!-- Error processing {ref.link_path}: {result['error']} -->\n"
+                    error_block = f"\n\n<!-- Error processing {ref.link_path}: {result.get('error', 'Unknown error')} -->\n"
                     content = content.replace(ref.original_text, f"{ref.original_text}{error_block}")
 
             return content, stats
@@ -153,13 +167,14 @@ class MarkdownProcessorV2:
         Returns:
             Dictionary of processing statistics
         """
-        total_stats = {
+        total_stats: Dict[str, Any] = {
             "files_processed": 0,
             "files_errored": 0,
             "success": 0,
             "error": 0,
             "missing": 0,
-            "skipped": 0
+            "skipped": 0,
+            "errors": []
         }
 
         try:
@@ -181,8 +196,14 @@ class MarkdownProcessorV2:
                 except Exception as e:
                     self.logger.error(f"Error processing {md_file.md_path}: {e}")
                     total_stats["files_errored"] += 1
+                    if isinstance(total_stats["errors"], list):
+                        total_stats["errors"].append(str(e))
 
-            return total_stats
+            # Convert to Dict[str, int] by removing the errors list
+            result: Dict[str, int] = {
+                k: v for k, v in total_stats.items() if k != "errors"
+            }
+            return result
 
         except Exception as e:
             self.logger.error(f"Error during batch processing: {e}")

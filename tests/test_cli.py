@@ -9,9 +9,14 @@ def test_load_config(tmp_path: Path) -> None:
     """Test loading configuration from file."""
     # Create test config file
     config_path = tmp_path / "config.toml"
+    src_dir = tmp_path / "src"
+    dest_dir = tmp_path / "dest"
+    src_dir.mkdir(parents=True)
+    dest_dir.mkdir(parents=True)
+
     config_path.write_text(
-        'srcDir = "/test/src"\n'
-        'destDir = "/test/dest"\n'
+        f'srcDir = "{src_dir}"\n'
+        f'destDir = "{dest_dir}"\n'
         'openai_key = "test-key"\n'
         'logLevel = "INFO"\n'
     )
@@ -21,8 +26,8 @@ def test_load_config(tmp_path: Path) -> None:
     config = load_config(config_path)
 
     # Verify config
-    assert config["srcDir"] == "/test/src"
-    assert config["destDir"] == "/test/dest"
+    assert config["srcDir"] == str(src_dir)
+    assert config["destDir"] == str(dest_dir)
     assert config["openai_key"] == "test-key"
     assert config["logLevel"] == "INFO"
 
@@ -31,8 +36,8 @@ def test_validate_config() -> None:
     """Test configuration validation."""
     # Valid config
     valid_config = {
-        "srcDir": "/test/src",
-        "destDir": "/test/dest",
+        "srcDir": "/tmp/test/src",
+        "destDir": "/tmp/test/dest",
         "openai_key": "test-key",
         "logLevel": "INFO"
     }
@@ -61,11 +66,17 @@ def test_validate_config() -> None:
 
 def test_main(tmp_path: Path) -> None:
     """Test main entry point."""
+    # Create test directories
+    src_dir = tmp_path / "src"
+    dest_dir = tmp_path / "dest"
+    src_dir.mkdir(parents=True)
+    dest_dir.mkdir(parents=True)
+
     # Create test config
     config_path = tmp_path / "config.toml"
     config_path.write_text(
-        'srcDir = "/test/src"\n'
-        'destDir = "/test/dest"\n'
+        f'srcDir = "{src_dir}"\n'
+        f'destDir = "{dest_dir}"\n'
         'openai_key = "test-key"\n'
         'logLevel = "INFO"\n'
     )
@@ -73,18 +84,13 @@ def test_main(tmp_path: Path) -> None:
     # Mock dependencies
     mock_processor = Mock()
     mock_processor.process_all.return_value = {
-        "files": {
-            "total": 3,
-            "success": 3,
-            "error": 0,
-        },
-        "attachments": {
-            "total": 6,
-            "success": 6,
-            "error": 0,
-            "skipped": 0,
-        },
-        "errors": [],
+        "files_processed": 3,
+        "files_errored": 0,
+        "success": 6,
+        "error": 0,
+        "missing": 0,
+        "skipped": 0,
+        "errors": []
     }
 
     with patch("sys.argv", ["prog", "-c", str(config_path)]), \
