@@ -37,12 +37,33 @@ openai_key = "your-api-key-here"  # Required for GPT-4o
 cbm_dir = ".cbm"  # System files location
 
 # Optional settings
-logLevel = "INFO"  # Default: INFO
+logLevel = "WARNING"  # Default: WARNING (for performance metrics)
 force_generation = false  # Default: false
 image_analysis_prompt = """Custom prompt for GPT-4o"""
 ~~~~
 
-### 3.2 File System Management
+### 3.2 Performance Monitoring
+- Comprehensive timing metrics at WARNING level:
+  ```
+  [WARNING] Entering function: process_markdown_file
+  [WARNING] Starting block: Processing reference: image.png
+  [WARNING] Starting block: GPT-4o analysis for image.png
+  [WARNING] Finished block: GPT-4o analysis | Elapsed: 2.4321 seconds
+  [WARNING] Finished block: Processing reference | Elapsed: 2.5432 seconds
+  [WARNING] Exiting function: process_markdown_file | Elapsed: 2.6543 seconds
+  ```
+- Function-level timing via decorators
+- Block-level timing via context managers
+- Detailed metrics for expensive operations:
+  - Image format conversion
+  - GPT-4o analysis
+  - Cache operations
+  - File processing
+- Performance statistics in processing summary
+- Cache hit/miss rate tracking
+- Error timing correlation
+
+### 3.3 File System Management
 - All system files stored in `.cbm/` directory:
   ```
   .cbm/
@@ -55,50 +76,60 @@ image_analysis_prompt = """Custom prompt for GPT-4o"""
 - Efficient file discovery and queueing
 - Smart regeneration based on file modification times
 
-### 3.3 Markdown Processing
+### 3.4 Markdown Processing
 - Modular processing pipeline:
   1. File discovery and validation
   2. Change detection and skip logic
   3. Reference extraction and parsing
   4. Attachment processing through MarkItDown
   5. Content consolidation and formatting
+- Performance tracking for each pipeline stage
 - Specialized handling for Bear's attachment format
 - Efficient caching of processed content
 - Skip processing for unchanged files
 
-### 3.4 Change Detection
-- Skip file processing if:
-  - Output file exists AND
-  - Output file is newer than source markdown AND
-  - Output file is newer than all attachments
-- Force regeneration available through:
-  - Config file setting (`force_generation = true`)
-  - CLI flag (`--force`)
-- Track skipped files in processing statistics
-- Log skipped files at INFO level
-
-### 3.4 Image Processing
+### 3.5 Image Processing
 - GPT-4o integration for image analysis
 - Image format conversion support:
-  - SVG → PNG (300 DPI)
+  - SVG → PNG via svglib (ReportLab)
   - HEIC/HEIF → JPG
   - Standard formats (PNG, JPG, GIF, WebP)
-- Efficient image caching system
+- Efficient image caching system with performance tracking
 - Detailed error handling for conversion failures
+- Performance metrics for:
+  - Format conversion operations
+  - Cache lookups and storage
+  - GPT-4o analysis
+  - Overall processing time
 
-### 3.5 Progress Tracking
+### 3.6 Progress Tracking
 - TQDM integration for:
   - Overall file processing
   - Individual file attachments
   - Conversion operations
 - Detailed progress logging
 - Error reporting and recovery
+- Performance statistics display:
+  ```
+  ╭───────────────────── Processing Complete ─────────────────────╮
+  │             Processing Summary                               │
+  │ ┏━━━━━━━━━━━━━┳━━━━━━━┳━━━━━━━━━┳━━━━━━━┳━━━━━━━━━┓      │
+  │ ┃ Category    ┃ Total ┃ Success ┃ Error ┃ Skipped ┃      │
+  │ ┡━━━━━━━━━━━━━╇━━━━━━━╇━━━━━━━━━╇━━━━━━━╇━━━━━━━━━┩      │
+  │ │ Files       │    10 │       8 │     1 │       1 │      │
+  │ │ Attachments │    25 │      20 │     3 │       2 │      │
+  │ └─────────────┴───────┴─────────┴───────┴─────────┘      │
+  ╰──────────────────────────────────────────────────────────╯
 
-### 3.6 Output Generation
-- Clean markdown output format
-- Preserved original structure
-- Detailed error placeholders for failed conversions
-- Consistent formatting and styling
+  Performance Metrics:
+  - Total Processing Time: 45.321s
+  - Average per File: 4.532s
+  - Cache Hit Rate: 85%
+  - Slowest Operations:
+    - GPT-4o Analysis: 35.123s
+    - Image Conversion: 8.765s
+    - Cache Operations: 1.433s
+  ```
 
 ## 4. Non-Functional Requirements
 
@@ -116,6 +147,9 @@ image_analysis_prompt = """Custom prompt for GPT-4o"""
     - All tests must run through UV: `uv run pytest -v`
     - Type checking must be performed before tests
     - Tests must run without requiring approval
+7. **SVG Processing**:
+    - Must use svglib with ReportLab for SVG conversion
+    - No other SVG conversion libraries are permitted
 
 ## 5. Assumptions & Constraints
 

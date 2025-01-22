@@ -5,11 +5,13 @@ description = "Process Bear.app markdown files and attachments with GPT-4o visio
 authors = [{ name = "Chad Walters", email = "chad.walters@gmail.com" }]
 dependencies = [
   "openai",               # For GPT-4o vision model
-  "wand",                 # For SVG to PNG conversion
+  "nocairosvg",           # For SVG to PNG conversion
   "pillow",               # For image processing
   "toml",                 # For configuration files
-  "tqdm",                 # For progress bars
   "pandas",               # For data processing
+  "tqdm",                 # For progress bars
+  "pillow-heif",          # For HEIC/HEIF support
+  "lxml",                 # Required by svglib
   "tabulate",             # For markdown tables
   "beautifulsoup4",       # For HTML processing
   "types-beautifulsoup4", # Type stubs for beautifulsoup4

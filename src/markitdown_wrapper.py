@@ -19,6 +19,7 @@ from markitdown import MarkItDown  # type: ignore
 
 from .image_cache import ImageCache
 from .image_converter import ImageConverter
+from .logging_utils import log_timing, log_block_timing
 
 # Configure OpenAI loggers to not show debug messages
 logging.getLogger("openai").setLevel(logging.INFO)
@@ -147,6 +148,7 @@ class MarkItDownWrapper:
                 "error_type": "pdf_conversion_error",
             }
 
+    @log_timing
     def convert_file(self, file_path: Path) -> Dict[str, Any]:
         """Convert a file to markdown format.
 
@@ -240,6 +242,7 @@ class MarkItDownWrapper:
             "text": None,
         }
 
+    @log_timing
     def _handle_image_file(self, file_path: Path) -> Dict[str, Any]:
         """Handle image file conversion."""
         # Check if file exists
@@ -255,98 +258,103 @@ class MarkItDownWrapper:
             }
 
         try:
-            # Check cache
+            # Check cache first
             if self.image_cache.is_processed(file_path):
-                cached_path = self.image_cache.get_cached_path(file_path)
-                if cached_path:
-                    logger.info(f"Using cached analysis for {file_path.name}")
-                    return {
-                        "success": True,
-                        "content": self._format_image_analysis(
-                            cached_path.read_text(), file_path.name
-                        ),
-                        "type": "image",
-                        "text_content": None,
-                        "text": None,
-                        "error": None,
-                        "error_type": None,
-                    }
+                with log_block_timing(f"Cache lookup for {file_path.name}"):
+                    cached_path = self.image_cache.get_cached_path(file_path)
+                    if cached_path:
+                        logger.info(f"Using cached analysis for {file_path.name}")
+                        return {
+                            "success": True,
+                            "content": self._format_image_analysis(
+                                cached_path.read_text(), file_path.name
+                            ),
+                            "type": "image",
+                            "text_content": None,
+                            "text": None,
+                            "error": None,
+                            "error_type": None,
+                        }
 
             # Handle HEIC files first
             if file_path.suffix.lower() in {".heic", ".heif"}:
-                converted_path = self.image_converter.convert_heic(file_path)
-                if not converted_path:
-                    return {
-                        "success": False,
-                        "content": None,
-                        "error": f"Failed to convert HEIC file: {file_path.name}",
-                        "type": "image",
-                        "text_content": None,
-                        "text": None,
-                        "error_type": "heic_conversion_error",
-                    }
-                file_path = converted_path
+                with log_block_timing(f"HEIC conversion for {file_path.name}"):
+                    converted_path = self.image_converter.convert_heic(file_path)
+                    if not converted_path:
+                        return {
+                            "success": False,
+                            "content": None,
+                            "error": f"Failed to convert HEIC file: {file_path.name}",
+                            "type": "image",
+                            "text_content": None,
+                            "text": None,
+                            "error_type": "heic_conversion_error",
+                        }
+                    file_path = converted_path
 
             # Convert image to PNG if not in supported format
             supported_formats = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
             if file_path.suffix.lower() not in supported_formats:
-                png_path = self.temp_images / f"{file_path.stem}.png"
-                if not self.image_converter.convert_to_png(file_path, png_path):
+                with log_block_timing(f"PNG conversion for {file_path.name}"):
+                    png_path = self.temp_images / f"{file_path.stem}.png"
+                    if not self.image_converter.convert_to_png(file_path, png_path):
+                        return {
+                            "success": False,
+                            "content": None,
+                            "error": f"Failed to convert {file_path.suffix} to PNG",
+                            "type": "image",
+                            "text_content": None,
+                            "text": None,
+                            "error_type": "image_conversion_error",
+                        }
+                    file_path = png_path
+
+            # Process the image
+            with log_block_timing(f"GPT-4o analysis for {file_path.name}"):
+                with open(file_path, "rb") as f:
+                    image_data = f.read()
+                    base64_image = base64.b64encode(image_data).decode()
+
+                # Analyze with GPT-4o
+                try:
+                    response = self.client.chat.completions.create(
+                        model="gpt-4o",
+                        messages=[
+                            {
+                                "role": "user",
+                                "content": [
+                                    {
+                                        "type": "text",
+                                        "text": "Describe this image in detail.",
+                                    },
+                                    {
+                                        "type": "image_url",
+                                        "image_url": {
+                                            "url": f"data:image/jpeg;base64,{base64_image}",
+                                            "detail": "high",
+                                        },
+                                    },
+                                ],
+                            }
+                        ],
+                    )
+                    analysis = response.choices[0].message.content
+                except Exception as e:
+                    logger.error("Error analyzing image: %s", str(e))
                     return {
                         "success": False,
                         "content": None,
-                        "error": f"Failed to convert {file_path.suffix} to PNG",
+                        "error": f"Error analyzing image: {str(e)}",
                         "type": "image",
                         "text_content": None,
                         "text": None,
-                        "error_type": "image_conversion_error",
+                        "error_type": "analysis_error",
                     }
-                file_path = png_path
-
-            # Process the image
-            with open(file_path, "rb") as f:
-                image_data = f.read()
-                base64_image = base64.b64encode(image_data).decode()
-
-            # Analyze with GPT-4o
-            try:
-                response = self.client.chat.completions.create(
-                    model="gpt-4o",
-                    messages=[
-                        {
-                            "role": "user",
-                            "content": [
-                                {
-                                    "type": "text",
-                                    "text": "Describe this image in detail.",
-                                },
-                                {
-                                    "type": "image_url",
-                                    "image_url": {
-                                        "url": f"data:image/jpeg;base64,{base64_image}",
-                                        "detail": "high",
-                                    },
-                                },
-                            ],
-                        }
-                    ],
-                )
-                analysis = response.choices[0].message.content
-            except Exception as e:
-                logger.error("Error analyzing image: %s", str(e))
-                return {
-                    "success": False,
-                    "content": None,
-                    "error": f"Error analyzing image: {str(e)}",
-                    "type": "image",
-                    "text_content": None,
-                    "text": None,
-                    "error_type": "analysis_error",
-                }
 
             # Cache successful analysis
             if analysis is not None:
-                self.image_cache.cache_analysis(file_path, analysis)
+                with log_block_timing(f"Cache storage for {file_path.name}"):
+                    self.image_cache.cache_analysis(file_path, analysis)
 
             return {
                 "success": True,

@@ -35,9 +35,21 @@ class ImageConverter:
             True if conversion successful, False otherwise
         """
         try:
-            # Handle SVG files separately using cairosvg
+            # Handle SVG files separately using svglib
             if input_path.suffix.lower() == ".svg":
-                return self.convert_svg(input_path, output_path)
+                try:
+                    from svglib.svglib import svg2rlg
+                    from reportlab.graphics import renderPM
+
+                    drawing = svg2rlg(str(input_path))
+                    if drawing is None:
+                        logger.error("Failed to parse SVG file")
+                        return False
+                    renderPM.drawToFile(drawing, str(output_path), fmt="PNG")
+                    return True
+                except Exception as e:
+                    logger.error("Error converting SVG: %s", str(e))
+                    return False
 
             # Use PIL for other formats
             with Image.open(input_path) as img:
@@ -58,50 +70,6 @@ class ImageConverter:
 
         except Exception as e:
             logger.error("Error converting image to PNG: %s", str(e))
-            return False
-
-    def convert_svg(self, input_path: Path, output_path: Path) -> bool:
-        """Convert SVG to PNG using cairosvg.
-
-        Args:
-            input_path: Path to SVG file
-            output_path: Path to save PNG output
-
-        Returns:
-            True if conversion successful, False otherwise
-        """
-        try:
-            # Try using cairosvg if available
-            try:
-                import cairosvg
-
-                cairosvg.svg2png(url=str(input_path), write_to=str(output_path))
-                return True
-            except ImportError:
-                pass
-
-            # Fallback to Inkscape if available
-            try:
-                result = subprocess.run(
-                    [
-                        "inkscape",
-                        "--export-type=png",
-                        "--export-filename",
-                        str(output_path),
-                        str(input_path),
-                    ],
-                    capture_output=True,
-                    text=True,
-                )
-                return result.returncode == 0
-            except FileNotFoundError:
-                pass
-
-            logger.error("No SVG conversion tools available (cairosvg or Inkscape)")
-            return False
-
-        except Exception as e:
-            logger.error("Error converting SVG: %s", str(e))
             return False
 
     def convert_heic(

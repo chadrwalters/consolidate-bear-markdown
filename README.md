@@ -48,6 +48,7 @@ Thanks to [@K-arch27](https://github.com/K-arch27) for the `yai` name idea!
 - Supports cloud storage locations (iCloud Drive, Google Drive)
 - Smart regeneration - only processes files that have changed
 - Force regeneration option available when needed
+- Simple SVG to PNG conversion using svglib with ReportLab
 
 ## Configuration
 

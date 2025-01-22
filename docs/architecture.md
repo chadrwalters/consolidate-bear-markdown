@@ -99,7 +99,24 @@ python3 -m pytest
 
 The core Python application consists of several key operations:
 
-#### 1.3.1 Argument & Config Processing
+#### 1.3.1 Performance Logging
+- Comprehensive timing metrics at WARNING level for:
+  - Function-level timing via `@log_timing` decorator
+  - Block-level timing via `log_block_timing` context manager
+  - Entry/exit timestamps for key functions
+  - Detailed timing for expensive operations:
+    - Image format conversion
+    - GPT-4o analysis
+    - Cache operations
+    - File processing
+- All timing logs include:
+  - Operation name/description
+  - Start time
+  - End time
+  - Total elapsed time in seconds
+  - Error tracking with timing context
+
+#### 1.3.2 Argument & Config Processing
 - Merges command-line arguments with config file settings
 - Initializes logging system based on logLevel
 - Validates paths and permissions
@@ -107,7 +124,7 @@ The core Python application consists of several key operations:
 - Creates necessary system directories in .cbm
 - Processes force regeneration flag
 
-#### 1.3.2 File Discovery and Change Detection
+#### 1.3.3 File Discovery and Change Detection
 - Walks srcDir to find all .md files
 - Handles Bear's export format exactly as-is
 - Processes attachments using relative paths from markdown files
@@ -115,7 +132,7 @@ The core Python application consists of several key operations:
 - Checks file modification times for smart regeneration
 - Builds processing queue of files and their attachments
 
-#### 1.3.3 Markdown Processing
+#### 1.3.4 Markdown Processing
 For each markdown file:
 1. Check if processing is needed:
    ```python
@@ -156,20 +173,26 @@ For each markdown file:
 - Handles conversion of various file types to markdown
 - Manages conversion errors with detailed feedback
 - Provides consistent output format
-- Uses Wand for high-quality SVG to PNG conversion (300 DPI)
+- Uses svglib with ReportLab for SVG to PNG conversion
 - Implements efficient image caching to avoid redundant processing
 - Configures OpenAI client for GPT-4o image processing (only permitted vision model)
 - Creates informative placeholders for unsupported files
+- Performance tracking for all conversion operations
 
 ### 1.5 Image Processing
-- SVG to PNG conversion using Wand library with 300 DPI quality
+- SVG to PNG conversion using svglib with ReportLab
 - Efficient image caching system in .cbm/cache
 - Automatic cache invalidation based on source file changes
 - Support for various image formats:
-  - SVG → PNG (via Wand)
+  - SVG → PNG (via svglib)
   - HEIC/HEIF → JPG
   - Standard formats (PNG, JPG, GIF, WebP)
 - Detailed error handling for conversion failures
+- Performance metrics for:
+  - Format conversion operations
+  - Cache lookups and storage
+  - GPT-4o analysis
+  - Overall processing time
 
 ### 1.6 Output Management
 - Creates .cbm directory structure:
@@ -177,13 +200,17 @@ For each markdown file:
   .cbm/
   ├── cache/          # Image and conversion cache
   │   └── images/     # Processed image files
-  └── logs/           # System and error logs
+  └── logs/          # System, error, and performance logs
   ```
 - Maintains Bear's file structure in output
 - Handles file write errors with retries
 - Ensures all system writes go to .cbm directory
 - Provides detailed error messages in output files
-- Tracks processing statistics including skipped files
+- Tracks processing statistics including:
+  - File counts (processed/skipped/errors)
+  - Operation timing metrics
+  - Cache hit/miss rates
+  - Performance bottlenecks
 
 ### 1.7 Change Detection System
 

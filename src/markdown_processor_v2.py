@@ -11,6 +11,7 @@ from .file_manager import FileManager
 from .file_system import FileSystem, MarkdownFile
 from .reference_match import ReferenceMatch, find_markdown_references
 from .processing_stats import ProcessingStats
+from .logging_utils import log_timing, log_block_timing
 
 logger = logging.getLogger(__name__)
 
@@ -81,6 +82,7 @@ class MarkdownProcessorV2:
 
         return False
 
+    @log_timing
     def _process_attachment(
         self,
         attachment_path: Path,
@@ -149,6 +151,7 @@ class MarkdownProcessorV2:
             f"{ref.original_text}\n<!-- Error: {error_msg} -->\n"
         )
 
+    @log_timing
     def process_markdown_file(
         self, md_file: MarkdownFile
     ) -> tuple[str, dict[str, int]]:
@@ -173,26 +176,27 @@ class MarkdownProcessorV2:
                 stats.record_skipped(str(ref.link_path))
                 continue
 
-            attachment_path = md_file.get_attachment(ref.link_path)
-            if not attachment_path:
-                stats.record_skipped(str(ref.link_path))
-                continue
+            with log_block_timing(f"Processing reference: {ref.link_path}"):
+                attachment_path = md_file.get_attachment(ref.link_path)
+                if not attachment_path:
+                    stats.record_skipped(str(ref.link_path))
+                    continue
 
-            # Save the current stats instance
-            old_stats = self.stats
-            self.stats = stats
+                # Save the current stats instance
+                old_stats = self.stats
+                self.stats = stats
 
-            result = self._process_attachment(attachment_path)
-            if result["success"]:
-                content = content.replace(
-                    ref.original_text,
-                    f"{ref.original_text}\n{result.get('content', '')}\n"
-                )
-            else:
-                content = self._update_reference_with_error(content, ref, result["error"])
+                result = self._process_attachment(attachment_path)
+                if result["success"]:
+                    content = content.replace(
+                        ref.original_text,
+                        f"{ref.original_text}\n{result.get('content', '')}\n"
+                    )
+                else:
+                    content = self._update_reference_with_error(content, ref, result["error"])
 
-            # Restore the old stats instance
-            self.stats = old_stats
+                # Restore the old stats instance
+                self.stats = old_stats
 
         return content, stats.get_statistics()
 
