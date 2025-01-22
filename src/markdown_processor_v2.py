@@ -160,7 +160,6 @@ class MarkdownProcessorV2:
         content = md_file.content
 
         if not md_file.attachment_dir:
-            logger.warning(f"Missing attachment directory for file: {md_file.md_path}")
             # Process references even without attachment directory to add error messages
             references = find_markdown_references(content)
             for ref in references:
