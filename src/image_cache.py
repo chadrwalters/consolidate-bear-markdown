@@ -1,15 +1,14 @@
-"""Image caching and deduplication."""
+"""Image analysis caching functionality."""
 
-import hashlib
 import logging
 from pathlib import Path
-from typing import Dict, Optional, Set
+from typing import Optional
 
 logger = logging.getLogger(__name__)
 
 
 class ImageCache:
-    """Handles image caching and deduplication."""
+    """Cache for image analysis results."""
 
     def __init__(self, cbm_dir: Path) -> None:
         """Initialize the image cache.
@@ -17,109 +16,65 @@ class ImageCache:
         Args:
             cbm_dir: Directory for system files and processing
         """
-        self.cbm_dir = Path(cbm_dir)
-        self.cache_dir = self.cbm_dir / "image_cache"
+        self.cache_dir = Path(cbm_dir) / "image_cache"
         self.cache_dir.mkdir(parents=True, exist_ok=True)
-        self._hash_map: Dict[str, Path] = {}
-        self._processed_images: Set[str] = set()
-
-    def get_cached_path(self, image_path: Path) -> Optional[Path]:
-        """Get the cached path for an image if it exists.
-
-        Args:
-            image_path: Path to the original image
-
-        Returns:
-            Path to the cached image if it exists, None otherwise
-        """
-        try:
-            image_hash = self._compute_hash(image_path)
-            return self._hash_map.get(image_hash)
-        except Exception as e:
-            logger.warning(f"Failed to get cached path for {image_path}: {e}")
-            return None
-
-    def cache_image(self, image_path: Path) -> Optional[Path]:
-        """Cache an image and return its cached path.
-
-        Args:
-            image_path: Path to the image to cache
-
-        Returns:
-            Path to the cached image
-        """
-        try:
-            image_hash = self._compute_hash(image_path)
-            if image_hash in self._hash_map:
-                return self._hash_map[image_hash]
-
-            # Create cached file with hash as name
-            cached_path = self.cache_dir / f"{image_hash}{image_path.suffix}"
-            if not cached_path.exists():
-                cached_path.write_bytes(image_path.read_bytes())
-
-            self._hash_map[image_hash] = cached_path
-            return cached_path
-
-        except Exception as e:
-            logger.error(f"Failed to cache image {image_path}: {e}")
-            return None
 
     def is_processed(self, image_path: Path) -> bool:
         """Check if an image has been processed.
 
         Args:
-            image_path: Path to the image
+            image_path: Path to the image file
 
         Returns:
             True if the image has been processed, False otherwise
         """
-        try:
-            image_hash = self._compute_hash(image_path)
-            return image_hash in self._processed_images
-        except Exception:
-            return False
+        cache_path = self._get_cache_path(image_path)
+        return cache_path.exists()
 
-    def mark_processed(self, image_path: Path) -> None:
-        """Mark an image as processed.
+    def get_cached_path(self, image_path: Path) -> Optional[Path]:
+        """Get the path to the cached analysis.
 
         Args:
-            image_path: Path to the image
-        """
-        try:
-            image_hash = self._compute_hash(image_path)
-            self._processed_images.add(image_hash)
-        except Exception as e:
-            logger.warning(f"Failed to mark image as processed {image_path}: {e}")
-
-    def _compute_hash(self, file_path: Path) -> str:
-        """Compute SHA-256 hash of a file.
-
-        Args:
-            file_path: Path to the file
+            image_path: Path to the image file
 
         Returns:
-            Hex digest of the file's SHA-256 hash
+            Path to the cached analysis file, or None if not found
         """
-        sha256_hash = hashlib.sha256()
-        with open(file_path, "rb") as f:
-            for byte_block in iter(lambda: f.read(4096), b""):
-                sha256_hash.update(byte_block)
-        return sha256_hash.hexdigest()
+        cache_path = self._get_cache_path(image_path)
+        return cache_path if cache_path.exists() else None
+
+    def cache_analysis(self, image_path: Path, analysis: str) -> None:
+        """Cache the analysis result.
+
+        Args:
+            image_path: Path to the image file
+            analysis: Analysis text to cache
+        """
+        cache_path = self._get_cache_path(image_path)
+        cache_path.write_text(analysis)
+
+    def _get_cache_path(self, image_path: Path) -> Path:
+        """Get the cache file path for an image.
+
+        Args:
+            image_path: Path to the image file
+
+        Returns:
+            Path where the cache file should be stored
+        """
+        # Use hash of absolute path as cache key
+        cache_key = str(image_path.resolve()).__hash__()
+        return self.cache_dir / f"{cache_key}.txt"
 
     def cleanup(self) -> None:
-        """Clean up cached files."""
+        """Clean up cache files."""
         try:
             if self.cache_dir.exists():
                 for file in self.cache_dir.iterdir():
                     try:
                         file.unlink()
                     except Exception as e:
-                        logger.warning(f"Failed to delete cached file {file}: {e}")
+                        logger.warning(f"Failed to delete cache file {file}: {e}")
                 self.cache_dir.rmdir()
         except Exception as e:
-            logger.error(f"Error cleaning up cache directory: {e}")
-
-    def __del__(self) -> None:
-        """Clean up on object deletion."""
-        self.cleanup()
+            logger.warning(f"Error cleaning up cache directory: {e}")

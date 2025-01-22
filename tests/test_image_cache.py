@@ -1,7 +1,7 @@
 """Tests for image caching functionality."""
 
-import hashlib
 from pathlib import Path
+
 import pytest
 
 from src.image_cache import ImageCache
@@ -9,29 +9,28 @@ from src.image_cache import ImageCache
 
 @pytest.fixture
 def image_cache(tmp_path: Path) -> ImageCache:
-    """Create an ImageCache instance for testing."""
-    return ImageCache(tmp_path)
+    """Create a test image cache."""
+    return ImageCache(cbm_dir=tmp_path)
 
 
-def test_cache_image(image_cache: ImageCache, tmp_path: Path) -> None:
-    """Test image caching functionality."""
+def test_cache_analysis(image_cache: ImageCache, tmp_path: Path) -> None:
+    """Test image analysis caching functionality."""
     # Create test image
     test_image = tmp_path / "test.jpg"
     test_image.write_bytes(b"test image data")
 
-    # Cache the image
-    cached_path = image_cache.cache_image(test_image)
-    assert cached_path is not None
-    assert cached_path.exists()
-    assert cached_path.read_bytes() == b"test image data"
+    # Cache analysis
+    analysis = "Test analysis result"
+    image_cache.cache_analysis(test_image, analysis)
 
-    # Try caching the same image again
-    cached_path2 = image_cache.cache_image(test_image)
-    assert cached_path2 == cached_path  # Should return the same path
+    # Verify cache
+    cached_path = image_cache.get_cached_path(test_image)
+    assert cached_path is not None
+    assert cached_path.read_text() == analysis
 
 
 def test_get_cached_path(image_cache: ImageCache, tmp_path: Path) -> None:
-    """Test retrieving cached image paths."""
+    """Test retrieving cached analysis paths."""
     # Create test image
     test_image = tmp_path / "test.jpg"
     test_image.write_bytes(b"test image data")
@@ -39,13 +38,12 @@ def test_get_cached_path(image_cache: ImageCache, tmp_path: Path) -> None:
     # Initially should return None
     assert image_cache.get_cached_path(test_image) is None
 
-    # Cache the image
-    cached_path = image_cache.cache_image(test_image)
+    # Cache analysis and verify path
+    analysis = "Test analysis"
+    image_cache.cache_analysis(test_image, analysis)
+    cached_path = image_cache.get_cached_path(test_image)
     assert cached_path is not None
-
-    # Should now return the cached path
-    retrieved_path = image_cache.get_cached_path(test_image)
-    assert retrieved_path == cached_path
+    assert cached_path.exists()
 
 
 def test_is_processed(image_cache: ImageCache, tmp_path: Path) -> None:
@@ -57,8 +55,8 @@ def test_is_processed(image_cache: ImageCache, tmp_path: Path) -> None:
     # Initially should not be processed
     assert not image_cache.is_processed(test_image)
 
-    # Mark as processed
-    image_cache.mark_processed(test_image)
+    # Cache analysis and verify processed
+    image_cache.cache_analysis(test_image, "Test analysis")
     assert image_cache.is_processed(test_image)
 
 
@@ -70,39 +68,20 @@ def test_cleanup(image_cache: ImageCache, tmp_path: Path) -> None:
     test_image1.write_bytes(b"test image 1")
     test_image2.write_bytes(b"test image 2")
 
-    cached_path1 = image_cache.cache_image(test_image1)
-    cached_path2 = image_cache.cache_image(test_image2)
+    image_cache.cache_analysis(test_image1, "Analysis 1")
+    image_cache.cache_analysis(test_image2, "Analysis 2")
 
+    # Verify files exist
+    cached_path1 = image_cache.get_cached_path(test_image1)
+    cached_path2 = image_cache.get_cached_path(test_image2)
     assert cached_path1 is not None and cached_path1.exists()
     assert cached_path2 is not None and cached_path2.exists()
 
-    # Clean up
+    # Cleanup and verify
     image_cache.cleanup()
-
-    # Verify files are cleaned up
-    assert not cached_path1.exists()
-    assert not cached_path2.exists()
+    assert image_cache.get_cached_path(test_image1) is None
+    assert image_cache.get_cached_path(test_image2) is None
     assert not image_cache.cache_dir.exists()
-
-
-def test_hash_computation(image_cache: ImageCache, tmp_path: Path) -> None:
-    """Test hash computation for images."""
-    # Create test image
-    test_image = tmp_path / "test.jpg"
-    image_data = b"test image data"
-    test_image.write_bytes(image_data)
-
-    # Compute hash manually
-    sha256_hash = hashlib.sha256()
-    sha256_hash.update(image_data)
-    expected_hash = sha256_hash.hexdigest()
-
-    # Cache the image and extract hash from path
-    cached_path = image_cache.cache_image(test_image)
-    assert cached_path is not None
-    actual_hash = cached_path.stem
-
-    assert actual_hash == expected_hash
 
 
 def test_error_handling(image_cache: ImageCache, tmp_path: Path) -> None:
@@ -110,13 +89,4 @@ def test_error_handling(image_cache: ImageCache, tmp_path: Path) -> None:
     # Test with non-existent file
     non_existent = tmp_path / "nonexistent.jpg"
     assert image_cache.get_cached_path(non_existent) is None
-    assert image_cache.cache_image(non_existent) is None
     assert not image_cache.is_processed(non_existent)
-
-    # Test with invalid file
-    invalid_file = tmp_path / "invalid.jpg"
-    invalid_file.write_text("not an image")
-    cached_path = image_cache.cache_image(invalid_file)
-    assert cached_path is not None  # Should still cache even if not a valid image
-    assert cached_path.exists()
-    assert cached_path.read_text() == "not an image"

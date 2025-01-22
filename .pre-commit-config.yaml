@@ -1,0 +1,34 @@
+repos:
+  - repo: local
+    hooks:
+      - id: type-check
+        name: Type Check
+        entry: uv run mypy src tests
+        language: system
+        types: [python]
+        pass_filenames: false
+        stages: [pre-push]
+
+      - id: ruff
+        name: Ruff Linting
+        entry: uv run ruff check src tests
+        language: system
+        types: [python]
+        pass_filenames: false
+        stages: [pre-push]
+
+      - id: black
+        name: Black Formatting
+        entry: uv run black src tests
+        language: system
+        types: [python]
+        pass_filenames: false
+        stages: [pre-push]
+
+      - id: pytest
+        name: Run Tests
+        entry: uv run pytest -v
+        language: system
+        types: [python]
+        pass_filenames: false
+        stages: [pre-push]

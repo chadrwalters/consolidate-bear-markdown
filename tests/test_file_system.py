@@ -1,11 +1,10 @@
 """Tests for file system operations."""
 
-import os
 from pathlib import Path
 
 import pytest
 
-from src.file_system import FileSystem, MarkdownFile
+from src.file_system import FileSystem
 
 
 @pytest.fixture
@@ -14,7 +13,7 @@ def fs(tmp_path: Path) -> FileSystem:
     return FileSystem(
         cbm_dir=str(tmp_path / ".cbm"),
         src_dir=str(tmp_path / "src"),
-        dest_dir=str(tmp_path / "dest")
+        dest_dir=str(tmp_path / "dest"),
     )
 
 

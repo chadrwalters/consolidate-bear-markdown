@@ -1,11 +1,11 @@
 """Logging configuration for the consolidate-bear-markdown tool."""
 
-import logging
-import os
 import atexit
-from pathlib import Path
-from typing import Optional, List, Dict
+import logging
 from logging import Handler
+import os
+from pathlib import Path
+from typing import List, Optional
 
 
 def _cleanup_logging() -> None:
@@ -65,6 +65,6 @@ def setup_logging(
         root_logger.addHandler(handler)
 
     # Suppress pdfminer debug logs
-    for logger_name in ['pdfminer.psparser', 'pdfminer.pdfinterp']:
+    for logger_name in ["pdfminer.psparser", "pdfminer.pdfinterp"]:
         logger = logging.getLogger(logger_name)
         logger.setLevel(logging.WARNING)

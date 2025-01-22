@@ -1,7 +1,6 @@
 """Tests for reference matching functionality."""
 
-import pytest
-from src.reference_match import find_markdown_references, ReferenceMatch
+from src.reference_match import ReferenceMatch, find_markdown_references
 
 
 def test_find_markdown_references_basic() -> None:
@@ -24,7 +23,7 @@ def test_find_markdown_references_basic() -> None:
         link_path="test/image.jpg",
         embed=True,
         is_image=True,
-        metadata={}
+        metadata={},
     )
 
     # Check link
@@ -34,7 +33,7 @@ def test_find_markdown_references_basic() -> None:
         link_path="test/doc.pdf",
         embed=True,
         is_image=False,
-        metadata={}
+        metadata={},
     )
 
     # Check image without alt text
@@ -44,7 +43,7 @@ def test_find_markdown_references_basic() -> None:
         link_path="test/image2.png",
         embed=True,
         is_image=True,
-        metadata={}
+        metadata={},
     )
 
 
@@ -68,7 +67,7 @@ def test_find_markdown_references_with_metadata() -> None:
         link_path="test.pdf",
         embed=True,
         is_image=False,
-        metadata={"embed": True}
+        metadata={"embed": True},
     )
 
     # Check link without embed metadata
@@ -78,7 +77,7 @@ def test_find_markdown_references_with_metadata() -> None:
         link_path="test2.pdf",
         embed=True,
         is_image=False,
-        metadata={"other": "value"}
+        metadata={"other": "value"},
     )
 
     # Check image with metadata
@@ -88,7 +87,7 @@ def test_find_markdown_references_with_metadata() -> None:
         link_path="img.jpg",
         embed=True,
         is_image=True,
-        metadata={"width": 100}
+        metadata={"width": 100},
     )
 
 
@@ -101,10 +100,10 @@ def test_find_markdown_references_invalid_metadata() -> None:
     refs = find_markdown_references(content)
     assert len(refs) == 1
     assert refs[0] == ReferenceMatch(
-        original_text='[Doc](test.pdf)<!-- {not json} -->',
+        original_text="[Doc](test.pdf)<!-- {not json} -->",
         alt_text="Doc",
         link_path="test.pdf",
         embed=True,
         is_image=False,
-        metadata={}
+        metadata={},
     )

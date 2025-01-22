@@ -1,12 +1,16 @@
 [project]
 name = "consolidate-bear-markdown"
 version = "0.1.0"
-description = "Consolidate Bear Markdown files into a single file"
+description = "Process Bear.app markdown files and attachments with GPT-4o vision analysis"
 authors = [{ name = "Chad Walters", email = "chad.walters@gmail.com" }]
 dependencies = [
-  "tabulate",             # Required for pandas markdown tables
-  "pandas-stubs",         # Type stubs for pandas
-  "pymupdf",              # For SVG to PNG conversion with high-quality output
+  "openai",               # For GPT-4o vision model
+  "wand",                 # For SVG to PNG conversion
+  "pillow",               # For image processing
+  "toml",                 # For configuration files
+  "tqdm",                 # For progress bars
+  "pandas",               # For data processing
+  "tabulate",             # For markdown tables
   "beautifulsoup4",       # For HTML processing
   "types-beautifulsoup4", # Type stubs for beautifulsoup4
 ]
@@ -14,26 +18,12 @@ requires-python = ">=3.11"
 
 [project.optional-dependencies]
 dev = [
-  "pytest",
-  "pytest-cov",
-  "pytest-mock",
-  "pytest-timeout",
-  "pytest-xdist",
-  "pytest-env",
-  "pytest-randomly",
-  "pytest-sugar",
-  "pytest-clarity",
-  "pytest-picked",
-  "pytest-reportlog",
-  "pytest-html",
-  "pytest-metadata",
-  "pytest-rerunfailures",
-  "pytest-repeat",
-  "pytest-ordering",
-  "pytest-benchmark",
-  "pytest-profiling",
-  "pytest-memray",
-  "pytest-monitor",
+  "pytest",     # Core testing framework
+  "pytest-cov", # Code coverage reporting
+  "mypy",       # Type checking
+  "black",      # Code formatting
+  "ruff",       # Fast linting
+  "pre-commit", # Pre-commit hooks
 ]
 
 [build-system]
@@ -56,7 +46,15 @@ python_files = ["test_*.py"]
 python_functions = ["test_*"]
 tmp_path_retention_count = 0
 tmp_path_retention_policy = "failed"
-tmp_path_cleanup_ignore_paths = [".nova"]
+filterwarnings = [
+  "default",                                                      # Show all warnings by default
+  "ignore::DeprecationWarning:_frozen_importlib_external.*:",     # Ignore importlib warnings
+  "ignore::DeprecationWarning:importlib._bootstrap.*:",           # Ignore bootstrap warnings
+  "ignore::DeprecationWarning:.*:0",                              # Ignore all other deprecation warnings
+  "ignore:builtin type SwigPyPacked has no __module__ attribute",
+  "ignore:builtin type SwigPyObject has no __module__ attribute",
+  "ignore:builtin type swigvarlink has no __module__ attribute",
+]
 
 [tool.mypy]
 python_version = "3.11"
@@ -70,7 +68,22 @@ line-length = 88
 target-version = ["py311"]
 
 [tool.ruff]
-select = ["E", "F", "B"]
-ignore = []
 line-length = 88
 target-version = "py311"
+
+[tool.ruff.lint]
+select = [
+  "E", # pycodestyle errors
+  "F", # pyflakes
+  "B", # flake8-bugbear
+  "I", # isort
+]
+ignore = []
+
+[tool.ruff.lint.isort]
+known-first-party = ["src"]
+combine-as-imports = true
+force-sort-within-sections = true
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["F841"] # Ignore unused variables in tests

@@ -1,14 +1,13 @@
 """File management and path handling for markdown processing."""
 
+import atexit
+from dataclasses import dataclass, field
 import logging
-import os
+from pathlib import Path
+import shutil
+from typing import Dict, Optional, Set
 import urllib.parse
 import weakref
-import atexit
-import shutil
-from pathlib import Path
-from typing import Dict, Optional, Set
-from dataclasses import dataclass, field
 
 logger = logging.getLogger(__name__)
 
@@ -65,14 +64,20 @@ class FileManager:
         try:
             # Create a stable name based on the directory structure
             rel_path = file_path.resolve().relative_to(self.src_dir.resolve())
-            stable_name = str(rel_path).replace('/', '_')
+            stable_name = str(rel_path).replace("/", "_")
         except ValueError:
             # If not relative to src_dir, just use the filename
             stable_name = file_path.name
 
         return target_dir / stable_name
 
-    def track_file(self, file_path: Path, dependent_file: Optional[Path] = None, *, is_temporary: bool = False) -> None:
+    def track_file(
+        self,
+        file_path: Path,
+        dependent_file: Optional[Path] = None,
+        *,
+        is_temporary: bool = False,
+    ) -> None:
         """Track a file resource.
 
         Args:
@@ -82,15 +87,24 @@ class FileManager:
         """
         path_str = str(file_path)
         if path_str not in self.resources:
-            self.resources[path_str] = FileResource(path=file_path, is_temporary=is_temporary)
+            self.resources[path_str] = FileResource(
+                path=file_path, is_temporary=is_temporary
+            )
 
         resource = self.resources[path_str]
         resource.reference_count += 1
         if dependent_file:
             resource.dependent_files.add(dependent_file)
-        logger.debug(f"Tracking {file_path} (count={resource.reference_count}, temporary={is_temporary})")
+        logger.debug(
+            "Tracking %s (count=%d, temporary=%s)",
+            file_path,
+            resource.reference_count,
+            is_temporary,
+        )
 
-    def release_file(self, file_path: Path, dependent_file: Optional[Path] = None) -> None:
+    def release_file(
+        self, file_path: Path, dependent_file: Optional[Path] = None
+    ) -> None:
         """Release a file resource.
 
         Args:
@@ -142,7 +156,9 @@ class FileManager:
                 # Handle URL-encoded parts
                 decoded = urllib.parse.unquote(part)
                 # Remove any problematic characters
-                cleaned = "".join(c for c in decoded if c.isprintable() and c not in '<>:"|?*')
+                cleaned = "".join(
+                    c for c in decoded if c.isprintable() and c not in '<>:"|?*'
+                )
                 parts.append(cleaned)
 
             return Path(*parts)
@@ -195,7 +211,9 @@ class FileManager:
 
             # Check if path is within allowed directories
             allowed_dirs = [self.src_dir, self.dest_dir, self.cbm_dir]
-            if not any(self._is_relative_to(path, allowed_dir) for allowed_dir in allowed_dirs):
+            if not any(
+                self._is_relative_to(path, allowed_dir) for allowed_dir in allowed_dirs
+            ):
                 logger.warning(f"Path is outside allowed directories: {path}")
                 return False
 
@@ -243,21 +261,49 @@ class FileManager:
         for path_str, resource in list(self.resources.items()):
             if resource.is_temporary and Path(path_str).exists():
                 try:
+                    if not self._is_managed_path(Path(path_str), resource):
+                        logger.warning(
+                            f"Skipping cleanup of unmanaged path: {path_str}"
+                        )
+                        continue
                     Path(path_str).unlink()
                     logger.debug(f"Cleaned up temporary file: {path_str}")
                 except Exception as e:
                     logger.warning(f"Failed to clean up temporary file {path_str}: {e}")
         self.resources.clear()
 
-        # Clean up temp directory
-        if self.temp_dir.exists():
+        # Clean up temp directory if it's within our cbm_dir
+        if self.temp_dir.exists() and self._is_managed_path(self.temp_dir):
             try:
                 shutil.rmtree(self.temp_dir)
                 logger.debug("Cleaned up temp directory")
             except Exception as e:
                 logger.warning(f"Error cleaning up temp directory: {e}")
 
-        logger.debug("Cleaned up all resources")
+    def _is_managed_path(
+        self, path: Path, resource: Optional[FileResource] = None
+    ) -> bool:
+        """Check if a path is managed by this FileManager.
+
+        Args:
+            path: Path to check
+            resource: Optional FileResource for the path
+
+        Returns:
+            True if path is within managed directories or is tracked
+        """
+        try:
+            # Always allow paths within cbm_dir
+            if self._is_relative_to(path, self.cbm_dir):
+                return True
+
+            # Allow tracked temporary files
+            if resource and resource.is_temporary:
+                return True
+
+            return False
+        except Exception:
+            return False
 
     def _cleanup(self) -> None:
         """Internal cleanup method called by weakref finalizer."""
@@ -268,7 +314,10 @@ class FileManager:
 
     def __del__(self) -> None:
         """Cleanup resources when the object is deleted."""
-        try:
-            self.cleanup()
-        except Exception:
-            pass  # Suppress errors during deletion
+        if hasattr(
+            self, "cleanup"
+        ):  # Check if cleanup exists during interpreter shutdown
+            try:
+                self.cleanup()
+            except Exception:
+                pass  # Suppress errors during deletion

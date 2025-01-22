@@ -3,9 +3,11 @@ from pathlib import Path
 from typing import List, Optional
 import urllib.parse
 
+
 @dataclass
 class MarkdownFile:
     """A markdown file with its attachments."""
+
     md_path: Path
     attachment_dir: Optional[Path] = None
     _attachments: List[Path] = field(default_factory=list, init=False)
@@ -22,8 +24,9 @@ class MarkdownFile:
         if self.attachment_dir and self.attachment_dir.exists():
             # Get all files in the attachment directory, excluding hidden files
             self._attachments = [
-                path for path in self.attachment_dir.iterdir()
-                if not path.name.startswith('.') and path.is_file()
+                path
+                for path in self.attachment_dir.iterdir()
+                if not path.name.startswith(".") and path.is_file()
             ]
             self._attachments.sort()  # Sort for consistent ordering
 

@@ -1,8 +1,9 @@
 """Tests for file management functionality."""
 
-import pytest
 from pathlib import Path
-import urllib.parse
+
+import pytest
+
 from src.file_manager import FileManager
 
 
@@ -10,9 +11,7 @@ from src.file_manager import FileManager
 def file_manager(tmp_path: Path) -> FileManager:
     """Create a file manager for testing."""
     return FileManager(
-        cbm_dir=tmp_path / ".cbm",
-        src_dir=tmp_path / "src",
-        dest_dir=tmp_path / "dest"
+        cbm_dir=tmp_path / ".cbm", src_dir=tmp_path / "src", dest_dir=tmp_path / "dest"
     )
 
 
@@ -64,7 +63,9 @@ def test_track_and_release_file(file_manager: FileManager, tmp_path: Path) -> No
     file_manager.release_file(file_path, dependent)
     assert file_manager.resources[str(file_path)].reference_count == 1
     file_manager.release_file(file_path, dependent)
-    assert str(file_path) not in file_manager.resources  # Should be removed when count reaches 0
+    assert (
+        str(file_path) not in file_manager.resources
+    )  # Should be removed when count reaches 0
 
 
 def test_temporary_file_cleanup(file_manager: FileManager, tmp_path: Path) -> None:

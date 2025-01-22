@@ -1,44 +1,22 @@
-"""Command-line interface for consolidate-bear-markdown."""
+"""Command line interface for markdown processing."""
 
-import argparse
 import logging
-import sys
-import tomli
 from pathlib import Path
-from typing import Dict, Any
-from rich.console import Console
-from rich.panel import Panel
-from rich.table import Table
-from markitdown import MarkItDown  # type: ignore
+import sys
+from typing import Dict
+
 from openai import OpenAI
+import tomli
+
+from .converter_factory import ConverterFactory
 from .file_system import FileSystem
-from .logging_config import setup_logging
 from .markdown_processor_v2 import MarkdownProcessorV2
-from .markitdown_wrapper import MarkItDownWrapper
 
-console = Console()
-error_console = Console(stderr=True)
+logger = logging.getLogger(__name__)
 
 
-def load_config(config_path: str | Path) -> Dict[str, Any]:
-    """Load configuration from TOML file.
-
-    Args:
-        config_path: Path to config file
-
-    Returns:
-        Configuration dictionary
-    """
-    try:
-        with open(config_path, "rb") as f:
-            return tomli.load(f)
-    except Exception as e:
-        error_console.print(f"[red]Error loading config file: {str(e)}[/red]")
-        sys.exit(1)
-
-
-def validate_config(config: Dict[str, Any]) -> None:
-    """Validate configuration values.
+def validate_config(config: Dict) -> None:
+    """Validate configuration.
 
     Args:
         config: Configuration dictionary
@@ -46,144 +24,97 @@ def validate_config(config: Dict[str, Any]) -> None:
     Raises:
         ValueError: If configuration is invalid
     """
-    required_fields = {
-        "srcDir": "Source directory path",
-        "destDir": "Destination directory path",
-        "openai_key": "OpenAI API key",
-    }
-
-    for field, desc in required_fields.items():
-        if field not in config:
-            raise ValueError(f"Missing required config field: {field} ({desc})")
+    required_fields = {"input_dir", "output_dir", "openai_api_key"}
+    missing_fields = required_fields - set(config.keys())
+    if missing_fields:
+        raise ValueError(f"Missing required config fields: {missing_fields}")
 
     # Validate log level if present
-    if "logLevel" in config:
-        valid_levels = {"DEBUG", "INFO", "WARNING", "ERROR"}
-        if config["logLevel"].upper() not in valid_levels:
+    if "log_level" in config:
+        valid_levels = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
+        if config["log_level"].upper() not in valid_levels:
             raise ValueError(
-                f"Invalid log level: {config['logLevel']}. "
+                f"Invalid log level: {config['log_level']}. "
                 f"Must be one of: {', '.join(valid_levels)}"
             )
 
 
-def display_summary(stats: Dict[str, int]) -> None:
-    """Display processing summary with rich formatting.
+def setup_logging(config: Dict) -> None:
+    """Set up logging configuration.
 
     Args:
-        stats: Processing statistics dictionary with integer values
+        config: Configuration dictionary
     """
-    # Create summary table
-    table = Table(title="Processing Summary", show_header=True)
-    table.add_column("Category", style="cyan")
-    table.add_column("Total", justify="right", style="white")
-    table.add_column("Success", justify="right", style="green")
-    table.add_column("Error", justify="right", style="red")
-    table.add_column("Skipped", justify="right", style="yellow")
-
-    # Add file statistics
-    table.add_row(
-        "Files",
-        str(stats["files_processed"] + stats["files_errored"]),
-        str(stats["files_processed"]),
-        str(stats["files_errored"]),
-        "N/A",
+    log_level = config.get("log_level", "INFO").upper()
+    logging.basicConfig(
+        level=log_level, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
     )
 
-    # Add attachment statistics
-    total_attachments = (
-        stats["success"]
-        + stats["error"]
-        + stats["missing"]
-        + stats["skipped"]
-    )
-    table.add_row(
-        "Attachments",
-        str(total_attachments),
-        str(stats["success"]),
-        str(stats["error"]),
-        str(stats["skipped"]),
-    )
 
-    # Display summary
-    console.print()
-    console.print(Panel(table, title="Processing Complete"))
+def process_files(config: Dict) -> None:
+    """Process markdown files according to configuration.
 
-
-def main() -> None:
-    """Main entry point."""
-    # Parse command line arguments
-    parser = argparse.ArgumentParser(
-        description="Process Bear.app markdown files and inline attachments."
-    )
-    parser.add_argument(
-        "-c",
-        "--config",
-        required=True,
-        help="Path to config.toml file",
-    )
-    args = parser.parse_args()
-
+    Args:
+        config: Configuration dictionary
+    """
     try:
-        # Load and validate configuration
-        config = load_config(args.config)
-        validate_config(config)
+        # Set up paths
+        src_dir = Path(config["input_dir"])
+        dest_dir = Path(config["output_dir"])
+        cbm_dir = Path(config.get("cbm_dir", ".cbm"))
 
-        # Convert paths to Path objects
-        src_dir = Path(config["srcDir"]).expanduser()
-        dest_dir = Path(config["destDir"]).expanduser()
-        cbm_dir = Path(config.get("cbm_dir", ".cbm")).expanduser()
-
-        # Set up logging
-        setup_logging(
-            log_level=config.get("logLevel", "INFO"),
-            cbm_dir=str(cbm_dir),
-        )
-        logger = logging.getLogger(__name__)
-
-        # Display startup banner
-        console.print()
-        console.print(
-            Panel(
-                "[cyan]Bear Markdown Processor[/cyan]\n"
-                f"Source: [green]{src_dir}[/green]\n"
-                f"Destination: [green]{dest_dir}[/green]",
-                title="Starting Processing",
-            )
-        )
+        # Initialize OpenAI client
+        client = OpenAI(api_key=config["openai_api_key"])
 
         # Initialize components
-        file_system = FileSystem(
-            cbm_dir=cbm_dir,
-            src_dir=src_dir,
-            dest_dir=dest_dir
-        )
-        openai_client = OpenAI(api_key=config["openai_key"])
-        markitdown = MarkItDownWrapper(
-            client=openai_client,
-            cbm_dir=cbm_dir,
-        )
+        fs = FileSystem(cbm_dir=cbm_dir, src_dir=src_dir, dest_dir=dest_dir)
+
+        # Create converter factory
+        converter_factory = ConverterFactory(cbm_dir=cbm_dir, openai_client=client)
 
         # Create processor
         processor = MarkdownProcessorV2(
-            markitdown=markitdown,
-            file_system=file_system,
+            converter_factory=converter_factory,
+            file_system=fs,
             src_dir=src_dir,
             dest_dir=dest_dir,
         )
 
-        # Process files and show statistics
-        logger.info("Starting markdown processing...")
-        stats = processor.process_all()
-
-        # Display summary
-        display_summary(stats)
-
-        # Exit with error if any files failed
-        if stats["files_errored"] > 0:
-            sys.exit(1)
+        # Process all files and print stats
+        processor.process_all()
+        print(processor.format_stats())
 
     except Exception as e:
-        error_console.print(f"[red]Error: {str(e)}[/red]")
+        logger.error(f"Error during processing: {e}")
+        raise
+
+
+def main() -> None:
+    """Main entry point."""
+    try:
+        # Check arguments
+        if len(sys.argv) != 3 or sys.argv[1] != "-c":
+            print("Usage: python -m src.cli -c config.toml")
+            sys.exit(1)
+
+        # Read config file
+        config_path = Path(sys.argv[2])
+        if not config_path.exists():
+            print(f"Config file not found: {config_path}")
+            sys.exit(1)
+
+        with open(config_path, "rb") as f:
+            config = tomli.load(f)
+
+        # Validate and setup
+        validate_config(config)
+        setup_logging(config)
+
+        # Process files
+        process_files(config)
+
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
 
 

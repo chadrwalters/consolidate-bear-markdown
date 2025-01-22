@@ -1,115 +1,83 @@
-"""Tests for the image converter module."""
+"""Tests for image conversion functionality."""
 
-import os
-import shutil
 from pathlib import Path
-from typing import Generator
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import pytest
-from PIL import Image
 
-from src.image_converter import ImageConverter
+from src.converters.image_converter import ImageConverter
 
-@pytest.fixture
-def converter(tmp_path: Path) -> ImageConverter:
-    """Create an ImageConverter instance for testing."""
-    return ImageConverter(cbm_dir=tmp_path / ".cbm")
 
 @pytest.fixture
-def converter_with_temp_dir(tmp_path: Path) -> ImageConverter:
-    """Create an ImageConverter instance with a temp directory for testing."""
-    return ImageConverter(cbm_dir=tmp_path / ".cbm")
+def clean_tmp_path(tmp_path: Path) -> Path:
+    """Create a clean temporary directory."""
+    test_dir = tmp_path / "test"
+    test_dir.mkdir()
+    return test_dir
 
-def test_init(tmp_path: Path) -> None:
-    """Test ImageConverter initialization."""
-    cbm_dir = tmp_path / ".cbm"
-    converter = ImageConverter(cbm_dir=cbm_dir)
 
-    assert converter.cbm_dir == cbm_dir
-    assert converter.temp_dir == cbm_dir / "temp_images"
-    assert converter.temp_dir.exists()
+def test_svg_conversion(clean_tmp_path: Path) -> None:
+    """Test SVG to PNG conversion."""
+    # Create test SVG file
+    svg_content = """<?xml version="1.0" encoding="UTF-8"?>
+    <svg width="100" height="100" xmlns="http://www.w3.org/2000/svg">
+        <rect width="100" height="100" fill="blue"/>
+    </svg>"""
+    svg_file = clean_tmp_path / "test.svg"
+    svg_file.write_text(svg_content)
 
-def test_convert_if_needed_supported_format(converter: ImageConverter, tmp_path: Path) -> None:
-    """Test that supported formats are not converted."""
-    # Create a test JPEG
-    test_image = tmp_path / "test.jpg"
-    Image.new('RGB', (100, 100)).save(test_image)
+    # Convert SVG
+    converter = ImageConverter(openai_client=Mock(), cbm_dir=clean_tmp_path)
+    output_path = clean_tmp_path / "test.png"
 
-    result = converter.convert_if_needed(test_image)
-    assert result == test_image
+    # Mock both cairosvg and subprocess.run
+    with (
+        patch.dict("sys.modules", {"cairosvg": None}),
+        patch("subprocess.run") as mock_run,
+    ):
+        mock_result = Mock()
+        mock_result.returncode = 0
+        mock_result.stdout = b""
+        mock_result.stderr = b""
+        mock_run.return_value = mock_result
 
-def test_convert_if_needed_nonexistent_file(converter: ImageConverter, tmp_path: Path) -> None:
-    """Test handling of nonexistent files."""
-    with pytest.raises(FileNotFoundError):
-        converter.convert_if_needed(tmp_path / "nonexistent.jpg")
+        # Test conversion
+        result = converter._convert_to_png(svg_file, output_path)
+        assert result is True
 
-def test_convert_with_pillow(converter: ImageConverter, tmp_path: Path) -> None:
-    """Test image conversion using Pillow."""
-    # Create a test PNG with transparency
-    test_image = tmp_path / "test.png"
-    img = Image.new('RGBA', (100, 100), (255, 0, 0, 128))
-    img.save(test_image)
+        # Verify inkscape was called correctly
+        mock_run.assert_called_once()
+        args = mock_run.call_args[0][0]
+        assert "inkscape" in args[0]
+        assert str(svg_file) in args
+        assert str(output_path) in args
 
-    result = converter.convert_if_needed(test_image)
-    assert result is not None
-    assert result.suffix == '.jpg'
 
-    # Verify the converted image
-    with Image.open(result) as converted:
-        assert converted.mode == 'RGB'
-        assert converted.size == (100, 100)
+def test_heic_conversion(clean_tmp_path: Path) -> None:
+    """Test HEIC conversion."""
+    with patch("src.converters.image_converter.HEIF_SUPPORT", True):
+        converter = ImageConverter(openai_client=Mock(), cbm_dir=clean_tmp_path)
+        assert converter.SUPPORTED_EXTENSIONS == {
+            ".jpg",
+            ".jpeg",
+            ".png",
+            ".gif",
+            ".webp",
+            ".heic",
+            ".heif",
+            ".svg",
+        }
 
-@pytest.mark.skipif(os.uname().sysname != 'Darwin', reason="sips only available on macOS")
-def test_convert_heic_with_sips(converter: ImageConverter, tmp_path: Path) -> None:
-    """Test HEIC conversion using sips on macOS."""
-    test_image = tmp_path / "test.heic"
-    test_image.write_bytes(b"fake heic")  # Create a fake HEIC file
 
-    # Mock sips conversion
-    with patch('subprocess.run') as mock_run:
-        mock_run.return_value.returncode = 0
-        result = converter.convert_if_needed(test_image)
-        assert result is not None
-        assert result.suffix == '.jpg'
-        mock_run.assert_called_once_with(
-            ['sips', '-s', 'format', 'jpeg', str(test_image), '--out', str(result)],
-            capture_output=True,
-            text=True
-        )
+def test_cleanup(clean_tmp_path: Path) -> None:
+    """Test cleanup functionality."""
+    converter = ImageConverter(openai_client=Mock(), cbm_dir=clean_tmp_path)
 
-def test_convert_heic_with_pillow_fallback(converter: ImageConverter, tmp_path: Path) -> None:
-    """Test HEIC conversion falling back to Pillow."""
-    test_image = tmp_path / "test.heic"
-
-    # Create a fake HEIC file
-    test_image.write_bytes(b"fake heic data")
-
-    # Mock sips failure and Pillow conversion
-    with patch('subprocess.run') as mock_run, \
-         patch('PIL.Image.open') as mock_open:
-        # Make sips fail
-        mock_run.side_effect = Exception("sips failed")
-
-        # Mock Pillow operations
-        mock_img = mock_open.return_value.__enter__.return_value
-        mock_img.mode = 'RGB'
-        mock_img.size = (100, 100)
-
-        result = converter.convert_if_needed(test_image)
-
-        assert mock_run.called  # sips was attempted
-        assert mock_open.called  # Pillow was used as fallback
-        assert result is not None
-        assert result.suffix == '.jpg'
-
-def test_cleanup(converter: ImageConverter, tmp_path: Path) -> None:
-    """Test cleanup of temporary files."""
     # Create some test files
-    test_file = converter.temp_dir / "test.jpg"
-    test_file.write_bytes(b"test data")
+    test_file = converter.temp_dir / "test.png"
+    test_file.touch()
 
+    # Cleanup
     converter.cleanup()
-
     assert not test_file.exists()
     assert not converter.temp_dir.exists()

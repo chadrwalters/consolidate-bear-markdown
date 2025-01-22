@@ -1,23 +1,25 @@
 """Reference matching and parsing for markdown content."""
 
-import re
+from dataclasses import dataclass
 import json
 import logging
-from dataclasses import dataclass
-from pathlib import Path
-from typing import List, Optional
+import re
+from typing import List
 
 logger = logging.getLogger(__name__)
+
 
 @dataclass
 class ReferenceMatch:
     """Represents a reference match in markdown content."""
+
     original_text: str
     alt_text: str
     link_path: str
     embed: bool
     is_image: bool
     metadata: dict
+
 
 def find_markdown_references(content: str) -> List[ReferenceMatch]:
     """Find all references in markdown content.
@@ -32,7 +34,7 @@ def find_markdown_references(content: str) -> List[ReferenceMatch]:
         List of ReferenceMatch objects
     """
     # Match links/images followed by optional HTML comments containing metadata
-    pattern = r'(?:!\[(.*?)\]|\[(.*?)\])\((.*?)\)(?:<!--\s*(.*?)\s*-->)?'
+    pattern = r"(?:!\[(.*?)\]|\[(.*?)\])\((.*?)\)(?:<!--\s*(.*?)\s*-->)?"
     references = []
 
     for match in re.finditer(pattern, content):
@@ -59,7 +61,7 @@ def find_markdown_references(content: str) -> List[ReferenceMatch]:
             link_path=link_path,
             embed=embed,
             is_image=is_image,
-            metadata=metadata
+            metadata=metadata,
         )
         references.append(ref)
 

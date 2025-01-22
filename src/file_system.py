@@ -1,10 +1,9 @@
 """File system operations for markdown processing."""
 
+from dataclasses import dataclass
 import logging
 from pathlib import Path
-from typing import Generator, List, Optional, Dict, Any, Union
-from dataclasses import dataclass
-import os
+from typing import Generator, List, Optional, Union
 import urllib.parse
 
 logger = logging.getLogger(__name__)
@@ -26,26 +25,32 @@ class MarkdownFile:
         Returns:
             The absolute path to the attachment file, or None if not found.
         """
-        if not self.attachment_dir:
-            return None
-
         # URL decode the reference path
         if isinstance(ref_path, str):
             ref_path = urllib.parse.unquote(ref_path)
         ref_path = Path(ref_path)
 
-        # Try these paths in order:
-        paths_to_try = [
-            self.attachment_dir / ref_path,  # Full path as referenced
-            self.attachment_dir / ref_path.name,  # Just the filename
-            self.md_path.parent / ref_path,  # Relative to markdown file
-            self.attachment_dir.parent / ref_path,  # Relative to attachment dir
-        ]
+        # Bear's export format uses paths relative to the markdown file
+        primary_path = self.md_path.parent / ref_path
+        if primary_path.exists():
+            logger.debug("Found attachment at primary path: %s", primary_path)
+            return primary_path
 
-        for path in paths_to_try:
+        # Fallback paths if the primary path doesn't exist
+        fallback_paths = []
+        if self.attachment_dir:
+            fallback_paths.extend(
+                [
+                    self.attachment_dir / ref_path,  # Full path in attachment dir
+                    self.attachment_dir
+                    / ref_path.name,  # Just the filename in attachment dir
+                ]
+            )
+
+        for path in fallback_paths:
             try:
                 if path.exists():
-                    logger.debug("Found attachment at: %s", path)
+                    logger.debug("Found attachment at fallback path: %s", path)
                     return path
             except Exception as e:
                 logger.debug("Error checking path %s: %s", path, e)
@@ -58,7 +63,9 @@ class MarkdownFile:
 class FileSystem:
     """Handles file system operations for markdown processing."""
 
-    def __init__(self, src_dir: str | Path, dest_dir: str | Path, cbm_dir: str | Path) -> None:
+    def __init__(
+        self, src_dir: str | Path, dest_dir: str | Path, cbm_dir: str | Path
+    ) -> None:
         """Initialize with source, destination, and system directories.
 
         Args:
@@ -80,15 +87,19 @@ class FileSystem:
             f"dest_dir={self.dest_dir}, cbm_dir={self.cbm_dir}"
         )
 
-    def normalize_cloud_path(self, path: str | Path, test_root: Optional[Path] = None) -> Path:
-        """Normalize cloud storage paths.
+    def normalize_path(
+        self,
+        path: Union[str, Path],
+        test_root: Optional[Path] = None,
+    ) -> Path:
+        """Normalize a path, handling cloud storage paths.
 
         Args:
-            path: The path to normalize, can be a string or Path object
-            test_root: Optional root directory for testing, used to mock cloud storage paths
+            path: The path to normalize
+            test_root: Optional root for testing cloud storage paths
 
         Returns:
-            A normalized Path object with cloud storage paths mapped to their actual locations
+            Path object with cloud paths mapped to local paths
         """
         # Convert to string first to check for cloud paths
         path_str = str(path)
@@ -128,7 +139,9 @@ class FileSystem:
                         if drive_dir.is_dir():
                             relative_path = path_str.split("Google Drive/")[-1]
                             path_obj = drive_dir / "My Drive" / relative_path
-                            logger.debug(f"Normalized test Google Drive path: {path_obj}")
+                            logger.debug(
+                                f"Normalized test Google Drive path: {path_obj}"
+                            )
                             return path_obj.resolve()
 
             # Fall back to user's home directory
@@ -153,7 +166,9 @@ class FileSystem:
         logger.debug(f"Regular path normalized: {resolved}")
         return resolved
 
-    def discover_markdown_files(self, start_dir: Optional[Path] = None) -> Generator[MarkdownFile, None, None]:
+    def discover_markdown_files(
+        self, start_dir: Optional[Path] = None
+    ) -> Generator[MarkdownFile, None, None]:
         """Find all markdown files in source directory.
 
         Args:
@@ -167,11 +182,13 @@ class FileSystem:
             raise FileNotFoundError(f"Directory not found: {search_dir}")
 
         for file_path in search_dir.rglob("*.md"):
-            if not any(p.startswith(".") for p in file_path.parts):  # Skip hidden directories
+            if not any(
+                p.startswith(".") for p in file_path.parts
+            ):  # Skip hidden directories
                 attachment_dir = file_path.parent / file_path.stem
                 yield MarkdownFile(
                     md_path=file_path,
-                    attachment_dir=attachment_dir if attachment_dir.exists() else None
+                    attachment_dir=attachment_dir if attachment_dir.exists() else None,
                 )
 
     def get_attachments(self, attachment_dir: Path) -> List[Path]:
