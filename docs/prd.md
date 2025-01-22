@@ -25,37 +25,62 @@ The tool integrates with OpenAI's GPT-4o model by default for enhanced image pro
 
 ## 3. Functional Requirements
 
-### 3.1 Config File
-- Must specify inputDir (the Bear-app-exported notes location) and outputDir (the location of resulting processed .md files).
-- Both directories might be located in an iCloud Drive or Google Drive folder. The script should handle that seamlessly, so paths like /Users/<User>/Library/Mobile Documents/com~apple~CloudDocs/... or a mounted Google Drive path are supported.
-- OpenAI API key configuration for GPT-4o image processing
-- Optional: Custom prompts for image analysis
+### 3.1 Config File (config.toml)
+~~~~toml
+# Required settings
+srcDir = "/path/to/bear/markdown"
+destDir = "/path/to/output"
+openai_key = "your-api-key-here"  # Required for GPT-4o
+cbm_dir = ".cbm"  # System files location
 
-### 3.2 Reading Source Markdown
-- For each .md file in inputDir, detect if a corresponding folder (with the same base name) exists (e.g. markdown.md and folder markdown/).
-- When attachments are referenced in the .md file (e.g. ![some-file](markdown/some-file.doc)), replace those references with the MarkItDown output inlined in the final text.
+# Optional settings
+logLevel = "INFO"  # Default: INFO
+image_analysis_prompt = """Custom prompt for GPT-4o"""
+~~~~
 
-### 3.3 Attachment Conversion
-- If an attachment is present (e.g. chad.doc or image.svg):
-  - Call MarkItDown's .convert() method on the attachment to produce its Markdown text.
-  - Insert that output in the place of the attachment reference in the final .md file (with a small separator or heading).
-- For image files:
-  - Use GPT-4o to analyze and describe image content
-  - Extract any visible text from diagrams, charts, or screenshots
-  - Convert visual information into structured markdown format
-  - Preserve original image reference while adding the AI-generated description
+### 3.2 File System Management
+- All system files stored in `.cbm/` directory:
+  ```
+  .cbm/
+  ├── cache/          # Image and conversion cache
+  │   └── images/     # Processed image files
+  └── logs/           # System and error logs
+  ```
+- Support for cloud storage paths (iCloud, Google Drive)
+- Robust path validation and permission checks
+- Efficient file discovery and queueing
 
-### 3.4 TQDM Progress
-- When processing multiple Markdown files, display a TQDM progress bar or stats (e.g., "Processing 5 files…").
-- Optionally, within each file, also show progress for attachments (if many exist).
+### 3.3 Markdown Processing
+- Modular processing pipeline:
+  1. File discovery and validation
+  2. Reference extraction and parsing
+  3. Attachment processing through MarkItDown
+  4. Content consolidation and formatting
+- Specialized handling for Bear's attachment format
+- Efficient caching of processed content
 
-### 3.5 Logging / Verbose Levels
-- Use Python's logging or a similar approach to differentiate standard progress logs (INFO) vs. debug details (DEBUG).
-- The user can control the logging level in the config file to get more or less detail while processing.
+### 3.4 Image Processing
+- GPT-4o integration for image analysis
+- Image format conversion support:
+  - SVG → PNG (300 DPI)
+  - HEIC/HEIF → JPG
+  - Standard formats (PNG, JPG, GIF, WebP)
+- Efficient image caching system
+- Detailed error handling for conversion failures
 
-### 3.6 Output
-- For every .md file, produce a new (or overwrite existing) .md in the output directory with inlined attachment text.
-- The final structure in the destDir will just be .md files (no subfolders for attachments).
+### 3.5 Progress Tracking
+- TQDM integration for:
+  - Overall file processing
+  - Individual file attachments
+  - Conversion operations
+- Detailed progress logging
+- Error reporting and recovery
+
+### 3.6 Output Generation
+- Clean markdown output format
+- Preserved original structure
+- Detailed error placeholders for failed conversions
+- Consistent formatting and styling
 
 ## 4. Non-Functional Requirements
 

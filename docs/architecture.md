@@ -2,6 +2,47 @@
 
 ## 1. Component Overview
 
+### Core Components
+
+1. **CLI (cli.py)**
+   - Handles command-line interface
+   - Processes arguments and configuration
+   - Initializes logging system
+   - Orchestrates the conversion process
+
+2. **File System (file_system.py)**
+   - Manages file system operations
+   - Handles cloud storage paths
+   - Creates and manages .cbm directory structure
+   - Validates paths and permissions
+
+3. **File Manager (file_manager.py)**
+   - Discovers and processes markdown files
+   - Manages file queues and processing order
+   - Handles file reading and writing operations
+   - Coordinates attachment processing
+
+4. **Markdown Processing**
+   - **markdown_processor_v2.py**: Core markdown processing logic
+   - **markitdown_wrapper.py**: MarkItDown integration and configuration
+   - **markdown_file.py**: Markdown file representation and operations
+   - **reference_match.py**: Handles Bear attachment references
+
+5. **Conversion System**
+   - **converter_factory.py**: Creates appropriate converters
+   - **file_converter.py**: Base converter interface
+   - **image_converter.py**: Specialized image handling
+   - **converters/**: Additional format-specific converters
+
+6. **Image Management**
+   - **image_cache.py**: Caches processed images
+   - Integrates with GPT-4o for vision processing
+   - Handles image format conversions
+
+7. **Logging & Configuration**
+   - **logging_config.py**: Centralized logging setup
+   - Configurable log levels and output
+
 ### 1.1 Configuration Loader
 
 The configuration loader reads settings for consolidate-bear-markdown from a TOML configuration file that specifies:
