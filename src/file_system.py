@@ -5,6 +5,7 @@ import logging
 from pathlib import Path
 from typing import Generator, List, Optional, Union
 import urllib.parse
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -15,6 +16,11 @@ class MarkdownFile:
 
     md_path: Path
     attachment_dir: Optional[Path] = None
+
+    @property
+    def content(self) -> str:
+        """Get the content of the markdown file."""
+        return self.md_path.read_text()
 
     def get_attachment(self, ref_path: Union[str, Path]) -> Optional[Path]:
         """Get the path to an attachment file.
@@ -165,6 +171,42 @@ class FileSystem:
         resolved = path_obj.resolve()
         logger.debug(f"Regular path normalized: {resolved}")
         return resolved
+
+    def normalize_cloud_path(self, path: str, test_root: Optional[Path] = None) -> Path:
+        """Normalize cloud storage paths.
+
+        Args:
+            path: Path to normalize
+            test_root: Optional root path for testing
+
+        Returns:
+            Normalized path
+        """
+        path = Path(path).expanduser()
+
+        # Handle iCloud Drive paths
+        if "iCloud Drive" in str(path):
+            # Convert "iCloud Drive" to actual iCloud path
+            root = test_root or Path.home()
+            icloud_base = root / "Library/Mobile Documents/com~apple~CloudDocs"
+            relative = Path(str(path).split("iCloud Drive/")[-1])
+            return icloud_base / relative
+
+        # Handle Google Drive paths
+        if "Google Drive" in str(path):
+            # Convert "Google Drive" to actual Google Drive path
+            root = test_root or Path.home()
+            # Look for Google Drive directory
+            cloud_storage = root / "Library/CloudStorage"
+            if cloud_storage.exists():
+                for entry in cloud_storage.iterdir():
+                    if entry.name.startswith("GoogleDrive-"):
+                        gdrive_base = entry / "My Drive"
+                        relative = Path(str(path).split("Google Drive/")[-1])
+                        return gdrive_base / relative
+
+        # Return original path if no cloud path detected
+        return path
 
     def discover_markdown_files(
         self, start_dir: Optional[Path] = None

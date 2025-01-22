@@ -9,18 +9,21 @@
    - Processes arguments and configuration
    - Initializes logging system
    - Orchestrates the conversion process
+   - Handles force regeneration flag
 
 2. **File System (file_system.py)**
    - Manages file system operations
    - Handles cloud storage paths
    - Creates and manages .cbm directory structure
    - Validates paths and permissions
+   - Provides file modification time utilities
 
 3. **File Manager (file_manager.py)**
    - Discovers and processes markdown files
    - Manages file queues and processing order
    - Handles file reading and writing operations
    - Coordinates attachment processing
+   - Implements change detection logic
 
 4. **Markdown Processing**
    - **markdown_processor_v2.py**: Core markdown processing logic
@@ -51,8 +54,9 @@ The configuration loader reads settings for consolidate-bear-markdown from a TOM
 srcDir = "/path/to/bear/markdown"
 destDir = "/path/to/output"
 logLevel = "INFO"
-openai_key = "your-api-key-here"  # Required for GPT-4o image processing
+openai_key = "your-api-key-here"  # Required for GPT-4o
 cbm_dir = ".cbm"  # Required for system files and logs
+force_generation = false  # Optional, default false
 image_analysis_prompt = """  # Optional custom prompt
   Analyze the image and extract all visible text in the original language.
   Reproduce the extracted text in a structured Markdown format, preserving
@@ -101,26 +105,52 @@ The core Python application consists of several key operations:
 - Validates paths and permissions
 - Handles cloud storage paths (iCloud, Google Drive) with proper path resolution
 - Creates necessary system directories in .cbm
+- Processes force regeneration flag
 
-#### 1.3.2 File Discovery
+#### 1.3.2 File Discovery and Change Detection
 - Walks srcDir to find all .md files
 - Handles Bear's export format exactly as-is
 - Processes attachments using relative paths from markdown files
 - Supports Bear's URL-encoded attachment paths
+- Checks file modification times for smart regeneration
 - Builds processing queue of files and their attachments
 
 #### 1.3.3 Markdown Processing
 For each markdown file:
-1. Reads source content
-2. Identifies attachment references using Bear's format
-3. For each attachment:
-   ~~~~python
-   from markitdown import MarkItDown
-   md_conv = MarkItDown(llm_client=client, llm_model="gpt-4o")
-   converted = md_conv.convert(attachment_full_path)
-   ~~~~
-4. Replaces references with converted content
-5. Writes final file to destDir
+1. Check if processing is needed:
+   ```python
+   def should_process(md_file: MarkdownFile) -> bool:
+       if force_generation:
+           return True
+
+       output_path = dest_dir / md_file.relative_path
+       if not output_path.exists():
+           return True
+
+       output_mtime = output_path.stat().st_mtime
+       if md_file.mtime > output_mtime:
+           return True
+
+       for attachment in md_file.attachments:
+           if attachment.mtime > output_mtime:
+               return True
+
+       return False
+   ```
+2. If processing needed:
+   - Reads source content
+   - Identifies attachment references using Bear's format
+   - For each attachment:
+     ```python
+     from markitdown import MarkItDown
+     md_conv = MarkItDown(llm_client=client, llm_model="gpt-4o")
+     converted = md_conv.convert(attachment_full_path)
+     ```
+   - Replaces references with converted content
+   - Writes final file to destDir
+3. If processing not needed:
+   - Log skip at INFO level
+   - Update skip counter in statistics
 
 ### 1.4 MarkItDown Integration
 - Handles conversion of various file types to markdown
@@ -153,60 +183,84 @@ For each markdown file:
 - Handles file write errors with retries
 - Ensures all system writes go to .cbm directory
 - Provides detailed error messages in output files
+- Tracks processing statistics including skipped files
 
-### 1.2 File Type Handling
+### 1.7 Change Detection System
 
-The system uses MarkItDown as the primary converter, with specialized fallbacks when needed:
+The change detection system is implemented across several components:
 
-1. Primary Conversion (MarkItDown):
-   - First attempt all conversions through MarkItDown
-   - Handles most file types automatically
-   - Provides consistent markdown output format
-   ~~~~python
-   from markitdown import MarkItDown
+1. **Configuration**
+   ```python
+   class Config:
+       force_generation: bool = False
 
-   markitdown = MarkItDown(llm_client=client, llm_model="gpt-4o")
-   result = markitdown.convert(file_path)
-   ~~~~
+       @classmethod
+       def from_toml(cls, config_path: Path) -> Config:
+           config = cls()
+           toml_config = toml.load(config_path)
+           config.force_generation = toml_config.get("force_generation", False)
+           return config
+   ```
 
-2. Fallback Handlers (only if MarkItDown fails):
+2. **CLI Integration**
+   ```python
+   def parse_args() -> argparse.Namespace:
+       parser = argparse.ArgumentParser()
+       parser.add_argument("--force", action="store_true",
+                         help="Force regeneration of all files")
+       return parser.parse_args()
+   ```
 
-   a. Images:
-      - SVG → PNG: Wand (300 DPI) when MarkItDown can't process
-      - HEIC/HEIF → JPG: Pillow as fallback
-      - Standard formats: Direct handling if needed
+3. **File Manager**
+   ```python
+   class FileManager:
+       def __init__(self, config: Config):
+           self.force_generation = config.force_generation
 
-   b. Documents:
-      - PDF: Direct text extraction if MarkItDown fails
-      - Spreadsheets: Pandas + tabulate as backup
-      - HTML: BeautifulSoup4 if needed
+       def should_process(self, md_file: MarkdownFile) -> bool:
+           if self.force_generation:
+               return True
 
-3. Error Strategy:
-   - Try MarkItDown first
-   - If fails, attempt format-specific fallback
-   - Generate detailed error placeholder if all fail
-   - Cache successful conversions
+           output_path = self.get_output_path(md_file)
+           if not output_path.exists():
+               return True
 
-### 1.3 Processing Flow
+           return self._check_modifications(md_file, output_path)
 
-1. For each file:
-   ~~~~python
-   try:
-       # Primary conversion attempt
-       result = markitdown.convert(file_path)
-       if result.success:
-           return format_result(result)
+       def _check_modifications(
+           self, md_file: MarkdownFile, output_path: Path
+       ) -> bool:
+           output_mtime = output_path.stat().st_mtime
 
-       # Fallback handling if MarkItDown fails
-       if file_path.suffix.lower() == '.svg':
-           return convert_svg_with_wand(file_path)
-       elif file_path.suffix.lower() in ['.heic', '.heif']:
-           return convert_heic_with_pillow(file_path)
-       # ... other format-specific fallbacks
+           # Check markdown file
+           if md_file.mtime > output_mtime:
+               return True
 
-   except UnsupportedFormatException:
-       return create_error_placeholder(file_path)
-   ~~~~
+           # Check attachments
+           for attachment in md_file.attachments:
+               if attachment.mtime > output_mtime:
+                   return True
+
+           return False
+   ```
+
+4. **Statistics Tracking**
+   ```python
+   @dataclass
+   class ProcessingStats:
+       files_processed: int = 0
+       files_skipped: int = 0
+       files_errored: int = 0
+       success: int = 0
+       error: int = 0
+       missing: int = 0
+       errors: List[str] = field(default_factory=list)
+
+       def update_skip(self) -> None:
+           self.files_skipped += 1
+   ```
+
+This architecture ensures efficient processing by only regenerating files when necessary while maintaining flexibility through the force regeneration option.
 
 ## 2. Data Flow
 

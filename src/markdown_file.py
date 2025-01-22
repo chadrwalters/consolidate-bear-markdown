@@ -35,6 +35,11 @@ class MarkdownFile:
         """Get the list of attachments."""
         return self._attachments
 
+    @property
+    def content(self) -> str:
+        """Get the content of the markdown file."""
+        return self.md_path.read_text()
+
     def get_attachment(self, ref_path: str) -> Optional[Path]:
         """Get an attachment by its reference path.
 

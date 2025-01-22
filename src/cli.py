@@ -1,5 +1,6 @@
 """Command line interface for markdown processing."""
 
+import argparse
 import logging
 from pathlib import Path
 import sys
@@ -38,6 +39,10 @@ def validate_config(config: Dict) -> None:
                 f"Must be one of: {', '.join(valid_levels)}"
             )
 
+    # Validate force_generation if present
+    if "force_generation" in config and not isinstance(config["force_generation"], bool):
+        raise ValueError("force_generation must be a boolean value")
+
 
 def setup_logging(config: Dict) -> None:
     """Set up logging configuration.
@@ -72,12 +77,13 @@ def process_files(config: Dict) -> None:
         # Create converter factory
         converter_factory = ConverterFactory(cbm_dir=cbm_dir, openai_client=client)
 
-        # Create processor
+        # Create processor with force_generation setting
         processor = MarkdownProcessorV2(
             converter_factory=converter_factory,
             file_system=fs,
             src_dir=src_dir,
             dest_dir=dest_dir,
+            force_generation=config.get("force_generation", False),
         )
 
         # Process all files and print stats
@@ -89,22 +95,40 @@ def process_files(config: Dict) -> None:
         raise
 
 
+def parse_args() -> argparse.Namespace:
+    """Parse command line arguments.
+
+    Returns:
+        Parsed arguments
+    """
+    parser = argparse.ArgumentParser(description="Process Bear.app markdown files.")
+    parser.add_argument("-c", "--config", required=True, help="Path to config file")
+    parser.add_argument(
+        "-f", "--force",
+        action="store_true",
+        help="Force regeneration of all files regardless of modification time",
+    )
+    return parser.parse_args()
+
+
 def main() -> None:
     """Main entry point."""
     try:
-        # Check arguments
-        if len(sys.argv) != 3 or sys.argv[1] != "-c":
-            print("Usage: python -m src.cli -c config.toml")
-            sys.exit(1)
+        # Parse arguments
+        args = parse_args()
 
         # Read config file
-        config_path = Path(sys.argv[2])
+        config_path = Path(args.config)
         if not config_path.exists():
             print(f"Config file not found: {config_path}")
             sys.exit(1)
 
         with open(config_path, "rb") as f:
             config = tomli.load(f)
+
+        # Override force_generation from command line if specified
+        if args.force:
+            config["force_generation"] = True
 
         # Validate and setup
         validate_config(config)

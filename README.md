@@ -10,7 +10,7 @@
 
 ## What is Yai ?
 
-`Yai` (your AI) is an assistant for your terminal, using [OpenAI ChatGPT](https://chat.openai.com/) to build and run commands for you. You just need to describe them in your everyday language, it will take care or the rest. 
+`Yai` (your AI) is an assistant for your terminal, using [OpenAI ChatGPT](https://chat.openai.com/) to build and run commands for you. You just need to describe them in your everyday language, it will take care or the rest.
 
 You have any questions on random topics in mind? You can also ask `Yai`, and get the power of AI without leaving `/home`.
 
@@ -40,3 +40,39 @@ See [documentation](https://ekkinox.github.io/yai/getting-started/#configuration
 ## Thanks
 
 Thanks to [@K-arch27](https://github.com/K-arch27) for the `yai` name idea!
+
+## Features
+
+- Processes Bear.app exported Markdown files and attachments
+- Integrates with OpenAI's GPT-4o model for enhanced image processing
+- Supports cloud storage locations (iCloud Drive, Google Drive)
+- Smart regeneration - only processes files that have changed
+- Force regeneration option available when needed
+
+## Configuration
+
+Example `config.toml`:
+```toml
+# Required settings
+srcDir = "/path/to/bear/markdown"
+destDir = "/path/to/output"
+openai_key = "your-api-key-here"  # Required for GPT-4o
+cbm_dir = ".cbm"  # System files location
+
+# Optional settings
+logLevel = "INFO"  # Default: INFO
+force_generation = false  # Default: false, set to true to force regeneration
+image_analysis_prompt = """Custom prompt for GPT-4o"""
+```
+
+## Usage
+
+The tool will automatically detect which files need to be regenerated based on modification times of source files and their attachments. You can override this behavior with the force_generation setting in config.toml or using the --force flag.
+
+```bash
+# Process only changed files
+consolidate-bear-markdown
+
+# Force processing of all files
+consolidate-bear-markdown --force
+```

@@ -28,6 +28,10 @@ logLevel = "INFO"
 # Default: .cbm
 cbm_dir = ".cbm"
 
+# Force regeneration of all files regardless of modification time
+# Default: false
+force_generation = false
+
 # Custom prompt for image analysis
 # Default: A general prompt for text extraction and formatting
 image_analysis_prompt = """

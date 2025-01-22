@@ -8,6 +8,8 @@ A primary use case is processing files directly from cloud storage locations lik
 
 The tool integrates with OpenAI's GPT-4o model by default for enhanced image processing, providing rich descriptions and text extraction from visual content. This enables better accessibility and searchability of image content within the consolidated markdown files.
 
+The tool implements smart regeneration, only processing files that have changed since the last run, with an option to force regeneration when needed.
+
 - **Input Directory (srcDir)**: Contains a set of .md files, each possibly having an attachment folder with the same base name as the markdown file.
   - Typically located in cloud storage, e.g., `/Users/<User>/Library/Mobile Documents/com~apple~CloudDocs/BearNotes` for iCloud or a mounted Google Drive path
   - For example, markdown.md might have a folder named markdown that holds attachments like chad.doc, image.svg, etc.
@@ -22,6 +24,7 @@ The tool integrates with OpenAI's GPT-4o model by default for enhanced image pro
 3. **AI-Enhanced Image Processing**: Leverage GPT-4o to provide detailed descriptions of images, extract text from diagrams/charts, and convert visual content into accessible markdown format.
 4. **Seamless Integration**: MarkItDown is a convenient library for converting multiple file types. We intend to make use of its flexible capabilities to convert images, .doc/.docx, .pdf, .pptx, .xls/.xlsx, .msg, etc.
 5. **Automated Processing**: A user can point the script at a directory, run it, and have the processed, inlined Markdown ready for them.
+6. **Efficient Processing**: Only regenerate files when source content has changed, saving time and resources, especially for large attachments and API-based conversions.
 
 ## 3. Functional Requirements
 
@@ -35,6 +38,7 @@ cbm_dir = ".cbm"  # System files location
 
 # Optional settings
 logLevel = "INFO"  # Default: INFO
+force_generation = false  # Default: false
 image_analysis_prompt = """Custom prompt for GPT-4o"""
 ~~~~
 
@@ -49,15 +53,29 @@ image_analysis_prompt = """Custom prompt for GPT-4o"""
 - Support for cloud storage paths (iCloud, Google Drive)
 - Robust path validation and permission checks
 - Efficient file discovery and queueing
+- Smart regeneration based on file modification times
 
 ### 3.3 Markdown Processing
 - Modular processing pipeline:
   1. File discovery and validation
-  2. Reference extraction and parsing
-  3. Attachment processing through MarkItDown
-  4. Content consolidation and formatting
+  2. Change detection and skip logic
+  3. Reference extraction and parsing
+  4. Attachment processing through MarkItDown
+  5. Content consolidation and formatting
 - Specialized handling for Bear's attachment format
 - Efficient caching of processed content
+- Skip processing for unchanged files
+
+### 3.4 Change Detection
+- Skip file processing if:
+  - Output file exists AND
+  - Output file is newer than source markdown AND
+  - Output file is newer than all attachments
+- Force regeneration available through:
+  - Config file setting (`force_generation = true`)
+  - CLI flag (`--force`)
+- Track skipped files in processing statistics
+- Log skipped files at INFO level
 
 ### 3.4 Image Processing
 - GPT-4o integration for image analysis
