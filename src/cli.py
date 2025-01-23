@@ -1,9 +1,9 @@
-"""Command line interface for markdown processing."""
+"""Command line interface for the Bear Markdown consolidation tool."""
 
 import argparse
 import logging
-from pathlib import Path
 import sys
+from pathlib import Path
 from typing import Dict
 
 from openai import OpenAI
