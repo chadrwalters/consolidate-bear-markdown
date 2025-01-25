@@ -12,6 +12,54 @@ The project is well-suited for users who want to keep Bear's structure — a Mar
 - Automatically detects changed files and only re-processes those (with a force-run option available).
 - Generates performance metrics and logs for each step of the conversion process.
 - Offers progress bars and summary statistics to keep track of processed notes.
+- Provides nested progress tracking:
+  - Outer progress bar for total Markdown files
+  - Inner progress bar for attachments within each file
+  - Clear console output with WARNING-level messages
+  - Detailed DEBUG logs in `.cbm/logs/debug.log`
+  - Comprehensive final summary table
+- Optional GPT-4o vision analysis with --no_image flag to skip when not needed.
+
+## Progress Tracking [NEW v2]
+
+The tool provides clear progress feedback during processing:
+
+```
+Processing Markdown Files: 45%|████▌     | 9/20 [00:25<00:30, 2.75s/file]
+  • Processing "Resume.md" ...
+  Attachments: 60%|██████    | 3/5 [00:15<00:10, 5.00s/att]
+```
+
+When processing completes, you'll see a detailed summary:
+
+```
+─────────────────────────────────────────────────
+                Processing Summary
+────────────────────┬────────────────────────────
+ Files              │ Attachments
+────────────────────┼────────────────────────────
+ Total:       41   │ Total:       54
+ Processed:   41   │ Processed:   54
+ Errors:       0   │ Errors:       0
+ Skipped:      0   │ Skipped:      0
+ Unchanged:    0   │ External:    52
+─────────────────────────────────────────────────
+```
+
+The summary distinguishes between:
+- **Files**: Markdown documents being processed
+  - Total: All markdown files found
+  - Processed: Successfully handled files
+  - Errors: Files with processing failures
+  - Skipped: Files intentionally skipped
+  - Unchanged: Files not needing updates
+- **Attachments**: Local files and external references
+  - Total: Number of local attachments found
+  - Processed: Successfully converted attachments
+  - Errors: Failed conversions
+  - Skipped: Intentionally skipped local files
+  - External: Count of external URL references (tracked separately)
+  - Images Skipped: Number of images skipped due to --no_image flag
 
 ## Project Structure
 
@@ -24,6 +72,15 @@ Some key files and directories:
   - `markitdown.py`: Example integration of a Pandoc-based system for converting documents to Markdown.
 - `tests/`: Contains pytest-based test suites that validate functionality and integration.
 - `docs/`: Contains project documentation, including a PRD and architectural overview.
+- `.cursor/`: Contains project-specific rules and configuration:
+  - `rules/`: Directory containing modular rule files
+    - `filesystem.rules`: File system and organization rules
+    - `python.rules`: Python coding standards
+    - `documentation.rules`: Documentation requirements
+    - `git.rules`: Git workflow rules
+    - `ai_commands.rules`: AI-specific commands and procedures
+  - `config.rules`: Project-specific configuration (not checked into version control)
+  - `config.rules.template`: Template for project configuration
 - `.cbm/`: Default directory (created at runtime) for caching, logs, and other system files.
 
 ## Requirements
@@ -68,42 +125,44 @@ uv run python -m src.cli --config config.toml
 Key options:
 - `--force`: Ignoring modification times, reprocess all files
 - `--config <path>`: Use a specific TOML configuration file (defaults to config.toml if not provided)
+- `--no_image`: Skip GPT-4o vision analysis for images, replacing with a simple placeholder
 
 Example:
 ```bash
+# Process all files with GPT-4o vision analysis
 uv run python -m src.cli --config config.toml --force
+
+# Process files but skip GPT-4o vision analysis
+uv run python -m src.cli --config config.toml --no_image
 ```
-This converts all Markdown files in srcDir to the output directory, inlining attachments and performing GPT-4o analysis for images.
+
+When using --no_image, images will still be processed but instead of GPT-4o analysis, you'll get a simple placeholder with image dimensions and file size. This is useful when:
+- You want faster processing without waiting for GPT-4o analysis
+- You want to save on OpenAI API costs
+- You don't need detailed image descriptions
+- You're doing a quick test run or debugging
 
 ## Logs, Caching, & System Files
 
-By default, system files go to `.cbm` in the repo or working directory:
-- `.cbm/cache` for storing cached conversions
-- `.cbm/logs` for logs
+The system uses two main directories for configuration and system files:
 
-This ensures no clutter in your source or destination directories.
+1. `.cursor/`: Contains project rules and configuration
+   - Rules are modular and portable across projects
+   - Project-specific settings in `config.rules` (not version controlled)
+   - Template provided in `config.rules.template`
+
+2. `.cbm/`: Contains runtime files and logs (as configured in `.cursor/config.rules`):
+   - `.cbm/cache` for storing cached conversions
+   - `.cbm/logs` for logs
+   - Additional directories as specified in configuration
+
+This ensures:
+- Portable rules that can be reused across projects
+- Project-specific configuration separate from shared rules
+- No clutter in your source or destination directories
+- Configurable system file locations
 
 ## Testing
 
 Use UV to run all tests:
-```bash
-uv run pytest -v
 ```
-
-This will:
-- Conduct type checking (via mypy)
-- Run linting (via ruff)
-- Execute tests (via pytest)
-
-## Contributing
-
-- Follow the repository rules: All code must remain under 250 lines, all environment commands via UV, etc.
-- Submit pull requests or open issues for improvements or bug fixes.
-
-## License
-
-Distributed under the [MIT License](LICENSE).
-
----
-
-Enjoy consolidating your Bear notes with inlined attachments and AI-augmented images!

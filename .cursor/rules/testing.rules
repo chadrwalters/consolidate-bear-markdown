@@ -1,0 +1,8 @@
+# Testing Rules
+
+rules:
+    testing:
+        - Use uv run pytest for ALL test runs
+        - Tests should run without approval
+        - Test command: uv run pytest -v
+        - Type checking MUST be run before tests

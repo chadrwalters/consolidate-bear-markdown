@@ -46,6 +46,78 @@
    - **logging_config.py**: Centralized logging setup
    - Configurable log levels and output
 
+### 1.1 Configuration System
+
+The configuration system is split into two main parts:
+
+#### 1.1.1 Rules System (.cursor/rules/)
+Modular, portable rules that define project standards and procedures:
+```python
+class RulesManager:
+    def __init__(self, rules_dir: Path = Path(".cursor/rules")):
+        self.rules_dir = rules_dir
+        self.rules: Dict[str, Dict] = {}
+        self._load_rules()
+
+    def _load_rules(self) -> None:
+        """Load all .rules files from the rules directory."""
+        for rule_file in self.rules_dir.glob("*.rules"):
+            self.rules[rule_file.stem] = self._parse_rule_file(rule_file)
+
+    def get_rule(self, rule_type: str, rule_name: str) -> Any:
+        """Get a specific rule by type and name."""
+        return self.rules.get(rule_type, {}).get(rule_name)
+```
+
+#### 1.1.2 Project Configuration (.cursor/config.rules)
+Project-specific settings that reference the rules:
+```python
+class ConfigManager:
+    def __init__(self, config_path: Path = Path(".cursor/config.rules")):
+        self.config_path = config_path
+        self.config: Dict[str, Any] = {}
+        self._load_config()
+
+    def _load_config(self) -> None:
+        """Load project-specific configuration."""
+        if not self.config_path.exists():
+            self._create_from_template()
+        self.config = self._parse_config_file()
+
+    def get_setting(self, section: str, key: str) -> Any:
+        """Get a specific configuration value."""
+        return self.config.get(section, {}).get(key)
+
+    def _create_from_template(self) -> None:
+        """Create config.rules from template if it doesn't exist."""
+        template_path = self.config_path.parent / "config.rules.template"
+        if template_path.exists():
+            shutil.copy(template_path, self.config_path)
+```
+
+#### 1.1.3 Configuration Integration
+The system integrates both components:
+```python
+class Configuration:
+    def __init__(self):
+        self.rules_manager = RulesManager()
+        self.config_manager = ConfigManager()
+
+    def get_system_dir(self) -> Path:
+        """Get configured system directory."""
+        return Path(self.config_manager.get_setting("project", "system_dir"))
+
+    def get_max_file_lines(self) -> int:
+        """Get configured maximum file lines."""
+        return self.config_manager.get_setting("project", "max_file_lines")
+
+    def should_process_file(self, file_path: Path) -> bool:
+        """Check if file should be processed based on rules."""
+        file_rules = self.rules_manager.get_rule("filesystem", "file_size")
+        max_lines = self.get_max_file_lines()
+        return self._check_file_rules(file_path, file_rules, max_lines)
+```
+
 ### 1.1 Configuration Loader
 
 The configuration loader reads settings for consolidate-bear-markdown from a TOML configuration file that specifies:
@@ -207,10 +279,62 @@ For each markdown file:
 - Ensures all system writes go to .cbm directory
 - Provides detailed error messages in output files
 - Tracks processing statistics including:
-  - File counts (processed/skipped/errors)
+  - File counts:
+    - Processed: Files successfully handled
+    - Errors: Files with processing failures
+    - Skipped: Files intentionally skipped
+    - Unchanged: Files not needing updates
+  - Attachment counts:
+    - Total: Local attachments found
+    - Processed: Successfully converted
+    - Errors: Failed to process
+    - Skipped: Intentionally skipped
+    - External URLs: References to external content (tracked separately)
   - Operation timing metrics
   - Cache hit/miss rates
   - Performance bottlenecks
+
+The statistics system distinguishes between local attachments and external URLs:
+```python
+@dataclass
+class ProcessingStats:
+    # File statistics
+    files_processed: int = 0
+    files_errored: int = 0
+    files_skipped: int = 0
+    files_unchanged: int = 0
+
+    # Attachment statistics
+    total_attachments: int = 0     # Local attachments only
+    success_attachments: int = 0
+    error_attachments: int = 0
+    skipped_attachments: int = 0
+    external_urls: int = 0         # Tracked separately
+
+    def record_external_url(self) -> None:
+        """Record an external URL reference without affecting attachment counts."""
+        self.external_urls += 1
+```
+
+This separation ensures accurate tracking of:
+- Local attachments that need processing
+- External URLs that are intentionally skipped
+- True error rates for local content
+
+The final summary displays this distinction:
+```
+─────────────────────────────────────────────────
+                Processing Summary
+────────────────────┬────────────────────────────
+ Files              │ Attachments
+────────────────────┼────────────────────────────
+ Total:       41   │ Total:       54
+ Processed:   41   │ Processed:   54
+ Errors:       0   │ Errors:       0
+ Skipped:      0   │ Skipped:      0
+ Unchanged:    0   │ External:    52
+─────────────────────────────────────────────────
+```
 
 ### 1.7 Change Detection System
 
@@ -289,7 +413,92 @@ The change detection system is implemented across several components:
 
 This architecture ensures efficient processing by only regenerating files when necessary while maintaining flexibility through the force regeneration option.
 
-## 2. Data Flow
+### 1.8 Progress Tracking System
+
+The progress tracking system is implemented through several components:
+
+1. **Progress Manager (progress_manager.py)**
+   ```python
+   class ProgressManager:
+       def __init__(self):
+           self.file_progress: Optional[tqdm] = None
+           self.attachment_progress: Optional[tqdm] = None
+
+       def start_file_progress(self, total_files: int) -> None:
+           self.file_progress = tqdm(total=total_files, desc="Processing Markdown Files")
+
+       def start_attachment_progress(self, total_attachments: int) -> None:
+           self.attachment_progress = tqdm(total=total_attachments, desc="Processing Attachments")
+   ```
+
+2. **Console Manager (console_manager.py)**
+   ```python
+   class ConsoleManager:
+       def __init__(self, log_level: str = "WARNING"):
+           self.log_level = log_level
+           self.setup_logging()
+
+       def setup_logging(self) -> None:
+           # Configure console logging
+           console_handler = logging.StreamHandler()
+           console_handler.setLevel(self.log_level)
+
+           # Configure file logging
+           file_handler = logging.FileHandler(".cbm/logs/debug.log")
+           file_handler.setLevel(logging.DEBUG)
+   ```
+
+3. **Statistics Tracking**
+   ```python
+   class ProcessingStats:
+       def __init__(self):
+           self.total_files: int = 0
+           self.processed_files: int = 0
+           self.error_files: int = 0
+           self.skipped_files: int = 0
+           self.unchanged_files: int = 0
+           self.total_attachments: int = 0
+           self.processed_attachments: int = 0
+           self.error_attachments: int = 0
+           self.skipped_attachments: int = 0
+   ```
+
+4. **Integration in MarkdownProcessorV2**
+   ```python
+   class MarkdownProcessorV2:
+       def __init__(self):
+           self.progress_manager = ProgressManager()
+           self.console_manager = ConsoleManager()
+           self.stats = ProcessingStats()
+
+       def process_all(self) -> None:
+           markdown_files = self.file_system.discover_markdown_files()
+           self.progress_manager.start_file_progress(len(markdown_files))
+
+           for md_file in markdown_files:
+               self.process_markdown_file(md_file)
+               self.progress_manager.update_file_progress()
+
+           self.print_summary()
+   ```
+
+Key features of the progress tracking system:
+- Nested progress bars for files and attachments
+- Real-time status updates with tqdm
+- Detailed timing information via logging
+- Error reporting and statistics collection
+- Clear console output with WARNING-level messages
+- Comprehensive DEBUG logs in `.cbm/logs/debug.log`
+- Final summary table with processing statistics
+
+The system ensures users have clear visibility into:
+- Overall progress of the conversion process
+- Current file being processed
+- Attachment processing progress
+- Error states and warnings
+- Final processing statistics
+
+## 2. Data Flow [UPDATED v2]
 
 ~~~~
  ┌─────────────────────┐       ┌──────────────────────────────┐
@@ -303,16 +512,19 @@ This architecture ensures efficient processing by only regenerating files when n
  ┌────────────────────────────────┐
  │    Main Orchestrator          │
  │1. Read config                  │
- │2. Setup Logging                │
+ │2. Setup Logging & Progress     │ [NEW v2]
  │3. Initialize Image Cache       │
  │4. Gather .md files            │
  │5. For each .md:               │
+ │   - Show outer progress bar   │ [NEW v2]
  │   - Parse Bear references     │
+ │   - Show inner progress bar   │ [NEW v2]
  │   - Process attachments       │
  │   - Convert images (Wand)     │
  │   - Cache processed files     │
  │   - Create detailed errors    │
  │   - Write to destDir         │
+ │6. Display final summary       │ [NEW v2]
  └─────────┬─────────────────────┘
            │
            │processed .md + metadata

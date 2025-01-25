@@ -36,15 +36,17 @@ class ImageConverter:
         ".svg",
     }
 
-    def __init__(self, *, openai_client: Optional[OpenAI], cbm_dir: Path):
+    def __init__(self, *, openai_client: Optional[OpenAI], cbm_dir: Path, skip_vision: bool = False):
         """Initialize image converter.
 
         Args:
             openai_client: OpenAI client for image analysis
             cbm_dir: Directory for system files and caching
+            skip_vision: If True, skip GPT-4o vision analysis and return placeholder
         """
         self.client = openai_client
         self.cbm_dir = cbm_dir
+        self.skip_vision = skip_vision
         self.cache = ImageCache(cbm_dir=cbm_dir)
         self.temp_dir = cbm_dir / "temp_images"
         self.temp_dir.mkdir(parents=True, exist_ok=True)
@@ -84,6 +86,19 @@ class ImageConverter:
                 "text": None,
                 "error": f"File not found: {file_path}",
                 "error_type": "file_not_found",
+            }
+
+        # If skip_vision is True, return a placeholder
+        if self.skip_vision:
+            logger.debug(f"Skipping GPT-4o analysis for {file_path.name} due to --no_image flag")
+            return {
+                "success": True,
+                "content": self._format_placeholder(file_path),
+                "type": "image",
+                "text_content": None,
+                "text": None,
+                "error": None,
+                "error_type": None,
             }
 
         if not self.client:
@@ -192,6 +207,30 @@ class ImageConverter:
         except Exception as e:
             logger.error("Error formatting analysis: %s", str(e))
             return analysis
+
+    def _format_placeholder(self, file_path: Path) -> str:
+        """Format a placeholder for skipped image analysis."""
+        try:
+            # Get image dimensions
+            dimensions = ""
+            try:
+                with Image.open(file_path) as img:
+                    dimensions = f"{img.width}x{img.height}, "
+            except Exception:
+                pass
+
+            # Get file metadata
+            file_size = file_path.stat().st_size
+            size_str = f"{file_size/1024:.1f}KB"
+
+            return (
+                f"## Image: {file_path.name}\n\n"
+                f"**Details**: {dimensions}{size_str}\n\n"
+                "*(GPT-4o vision analysis skipped. Use without --no_image to analyze.)*\n"
+            )
+        except Exception as e:
+            logger.error("Error formatting placeholder: %s", str(e))
+            return f"## Image: {file_path.name}\n\n*(GPT-4o vision analysis skipped)*\n"
 
     def _convert_to_png(self, input_path: Path, output_path: Path) -> bool:
         """Convert image to PNG format."""

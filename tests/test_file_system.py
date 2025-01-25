@@ -1,10 +1,11 @@
 """Tests for file system operations."""
 
 from pathlib import Path
+import os
 
 import pytest
 
-from src.file_system import FileSystem
+from src.file_system import FileSystem, MarkdownFile
 
 
 @pytest.fixture
@@ -32,37 +33,38 @@ def test_init(tmp_path: Path) -> None:
 
 def test_normalize_cloud_path(fs: FileSystem, tmp_path: Path) -> None:
     """Test cloud path normalization."""
-    # Create mock iCloud directory structure
-    icloud_base = tmp_path / "Library/Mobile Documents/com~apple~CloudDocs"
-    icloud_base.mkdir(parents=True)
-    icloud_docs = icloud_base / "Documents"
-    icloud_docs.mkdir()
-    test_file = icloud_docs / "notes.md"
-    test_file.touch()
+    # Create test directories
+    icloud_dir = tmp_path / "Library/Mobile Documents/com~apple~CloudDocs/Documents"
+    icloud_dir.mkdir(parents=True)
+    icloud_file = icloud_dir / "notes.md"
+    icloud_file.touch()
 
-    # Create mock Google Drive directory structure
-    gdrive_base = tmp_path / "Library/CloudStorage/GoogleDrive-user@gmail.com/My Drive"
-    gdrive_base.mkdir(parents=True)
-    gdrive_docs = gdrive_base / "Documents"
-    gdrive_docs.mkdir()
-    gdrive_file = gdrive_docs / "notes.md"
+    gdrive_dir = tmp_path / "Library/CloudStorage/GoogleDrive-test/My Drive/Documents"
+    gdrive_dir.mkdir(parents=True)
+    gdrive_file = gdrive_dir / "notes.md"
     gdrive_file.touch()
 
     # Test iCloud path
     path = str(tmp_path / "iCloud Drive/Documents/notes.md")
     normalized = fs.normalize_cloud_path(path, test_root=tmp_path)
+    if normalized is None:
+        pytest.fail("Expected normalized path to not be None")
     assert "Library/Mobile Documents/com~apple~CloudDocs" in str(normalized)
     assert normalized.exists()
 
     # Test Google Drive path
     path = str(tmp_path / "Google Drive/Documents/notes.md")
     normalized = fs.normalize_cloud_path(path, test_root=tmp_path)
+    if normalized is None:
+        pytest.fail("Expected normalized path to not be None")
     assert "Library/CloudStorage/GoogleDrive-" in str(normalized)
     assert normalized.exists()
 
     # Test regular path
     path = str(tmp_path / "Documents/notes.md")
     normalized = fs.normalize_cloud_path(path, test_root=tmp_path)
+    if normalized is None:
+        pytest.fail("Expected normalized path to not be None")
     assert str(normalized) == str(Path(path).resolve())
 
 
@@ -134,3 +136,132 @@ def test_ensure_output_dir(fs: FileSystem, tmp_path: Path) -> None:
     assert output_path.parent.exists()
     assert output_path.name == "test.md"
     assert output_path.parent == tmp_path / "dest" / "notes"
+
+
+def test_attachment_resolution_with_url_encoded_paths(tmp_path: Path) -> None:
+    """Test attachment resolution with URL encoded paths."""
+    # Create test directory structure
+    cloud_base = tmp_path / "Library/Mobile Documents/com~apple~CloudDocs/_NovaInput"
+    cloud_base.mkdir(parents=True)
+
+    # Create test markdown file and attachment directory with spaces
+    md_dir = cloud_base / "20241230 - O1 and Cursor Demo"
+    md_dir.mkdir(parents=True)
+    md_file = md_dir / "20241230 - O1 and Cursor Demo.md"
+    md_file.write_text("Test content")
+
+    # Create attachment directory and file
+    attachment_dir = md_dir / "20241230 - O1 and Cursor Demo"
+    attachment_dir.mkdir()
+    attachment_file = attachment_dir / "20241222 O1 and Cursor Demo.mov"
+    attachment_file.write_text("Test video content")
+
+    # Initialize FileSystem with test paths
+    fs = FileSystem(
+        src_dir=cloud_base,
+        dest_dir=tmp_path / "output",
+        cbm_dir=tmp_path / "cbm"
+    )
+
+    # Get the markdown file through discovery
+    md_files = list(fs.discover_markdown_files())
+    assert len(md_files) == 1
+    md_obj = md_files[0]
+
+    # Try to get the attachment using URL encoded path
+    encoded_path = "20241230%20-%20O1%20and%20Cursor%20Demo/20241222%20O1%20and%20Cursor%20Demo.mov"
+    attachment = md_obj.get_attachment(encoded_path)
+
+    # Assert that we found the attachment
+    assert attachment is not None, "Attachment should not be None"
+    assert str(attachment).endswith("20241222 O1 and Cursor Demo.mov"), f"Unexpected attachment path: {attachment}"
+
+
+def test_attachment_resolution_with_complex_paths(tmp_path: Path) -> None:
+    """Test attachment resolution with complex paths."""
+    # Create test directory structure with spaces and special characters
+    cloud_base = tmp_path / "Library/Mobile Documents/com~apple~CloudDocs/_NovaInput"
+    cloud_base.mkdir(parents=True)
+
+    # Create nested directory structure with spaces
+    md_dir = cloud_base / "20241230 - O1 and Cursor Demo"
+    md_dir.mkdir(parents=True)
+
+    # Create markdown file
+    md_file = md_dir / "20241230 - O1 and Cursor Demo.md"
+    md_file.write_text("Test content with reference to [[20241222 O1 and Cursor Demo.mov]]")
+
+    # Create nested attachment directory
+    attachment_dir = md_dir / "20241230 - O1 and Cursor Demo"
+    attachment_dir.mkdir()
+
+    # Create attachment file
+    attachment_file = attachment_dir / "20241222 O1 and Cursor Demo.mov"
+    attachment_file.write_text("Test video content")
+
+    # Initialize FileSystem with test paths
+    fs = FileSystem(
+        src_dir=str(cloud_base),
+        dest_dir=str(tmp_path / "output"),
+        cbm_dir=str(tmp_path / "cbm")
+    )
+
+    # Get the markdown file through discovery
+    md_files = list(fs.discover_markdown_files())
+    assert len(md_files) == 1
+    md_obj = md_files[0]
+
+    # Test with various forms of URL encoded paths
+    test_paths = [
+        "20241230%20-%20O1%20and%20Cursor%20Demo/20241222%20O1%20and%20Cursor%20Demo.mov",
+        "20241230 - O1 and Cursor Demo/20241222 O1 and Cursor Demo.mov",
+        "20241230%20-%20O1%20and%20Cursor%20Demo/20241222 O1 and Cursor Demo.mov",
+    ]
+
+    for path in test_paths:
+        attachment = md_obj.get_attachment(path)
+        assert attachment is not None, f"Failed to resolve attachment path: {path}"
+        assert str(attachment).endswith("20241222 O1 and Cursor Demo.mov"), f"Unexpected attachment path: {attachment}"
+
+    # Test with non-existent file
+    bad_path = "20241230%20-%20O1%20and%20Cursor%20Demo/nonexistent.mov"
+    attachment = md_obj.get_attachment(bad_path)
+    assert attachment is None, f"Expected None for non-existent path: {bad_path}"
+
+
+def test_attachment_resolution_with_real_cloud_paths(tmp_path: Path) -> None:
+    """Test attachment resolution with real cloud paths."""
+    # Create test directory structure
+    cloud_base = tmp_path / "Library/Mobile Documents/com~apple~CloudDocs/_NovaInput"
+    cloud_base.mkdir(parents=True)
+
+    # Create nested directory structure with spaces
+    md_dir = cloud_base / "20241230 - O1 and Cursor Demo"
+    md_dir.mkdir(parents=True)
+
+    # Create markdown file
+    md_file = md_dir / "20241230 - O1 and Cursor Demo.md"
+    md_file.write_text("Test content with reference to [[20241222 O1 and Cursor Demo.mov]]")
+
+    # Create attachment file directly in the markdown directory
+    attachment_file = md_dir / "20241222 O1 and Cursor Demo.mov"
+    attachment_file.write_text("Test video content")
+
+    # Initialize FileSystem with test paths
+    fs = FileSystem(
+        src_dir=str(cloud_base),
+        dest_dir=str(tmp_path / "output"),
+        cbm_dir=str(tmp_path / "cbm")
+    )
+
+    # Get the markdown file through discovery
+    md_files = list(fs.discover_markdown_files())
+    assert len(md_files) == 1
+    md_obj = md_files[0]
+
+    # Test with URL encoded path
+    encoded_path = "20241230%20-%20O1%20and%20Cursor%20Demo/20241222%20O1%20and%20Cursor%20Demo.mov"
+    attachment = md_obj.get_attachment(encoded_path)
+    assert attachment is not None, f"Failed to resolve attachment path: {encoded_path}"
+    assert str(attachment).endswith("20241222 O1 and Cursor Demo.mov"), f"Unexpected attachment path: {attachment}"
+    assert attachment.exists(), f"Attachment file not found: {attachment}"

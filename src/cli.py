@@ -51,9 +51,23 @@ def setup_logging(config: Dict) -> None:
         config: Configuration dictionary
     """
     log_level = config.get("log_level", "INFO").upper()
-    logging.basicConfig(
-        level=log_level, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-    )
+
+    # Configure root logger
+    root_logger = logging.getLogger()
+    root_logger.setLevel(log_level)
+
+    # Configure console handler
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(log_level)
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    console_handler.setFormatter(formatter)
+
+    # Remove any existing handlers and add our new one
+    root_logger.handlers = []
+    root_logger.addHandler(console_handler)
+
+    # Set package loggers to the same level
+    logging.getLogger('src').setLevel(log_level)
 
 
 def process_files(config: Dict) -> None:
@@ -75,7 +89,11 @@ def process_files(config: Dict) -> None:
         fs = FileSystem(cbm_dir=cbm_dir, src_dir=src_dir, dest_dir=dest_dir)
 
         # Create converter factory
-        converter_factory = ConverterFactory(cbm_dir=cbm_dir, openai_client=client)
+        converter_factory = ConverterFactory(
+            cbm_dir=cbm_dir,
+            openai_client=client,
+            no_image=config.get("no_image", False)
+        )
 
         # Create processor with force_generation setting
         processor = MarkdownProcessorV2(
@@ -84,6 +102,7 @@ def process_files(config: Dict) -> None:
             src_dir=src_dir,
             dest_dir=dest_dir,
             force_generation=config.get("force_generation", False),
+            config=config,
         )
 
         # Process all files and print stats
@@ -108,6 +127,11 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Force regeneration of all files regardless of modification time",
     )
+    parser.add_argument(
+        "--no_image",
+        action="store_true",
+        help="Skip GPT-4o vision analysis for images; insert placeholder instead",
+    )
     return parser.parse_args()
 
 
@@ -129,6 +153,9 @@ def main() -> None:
         # Override force_generation from command line if specified
         if args.force:
             config["force_generation"] = True
+
+        # Set no_image from CLI
+        config["no_image"] = args.no_image
 
         # Validate and setup
         validate_config(config)

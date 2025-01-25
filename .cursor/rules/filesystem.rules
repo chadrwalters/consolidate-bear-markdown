@@ -1,0 +1,27 @@
+# File System Rules
+# This file contains portable rules that reference project-specific config from config.rules
+
+rules:
+    file_system:
+        - All system files MUST be stored in ${config.project.system_dir}
+        - All logs MUST be stored in ${config.project.system_dir}/${config.project.log_dir}
+        - All temporary files MUST be stored in ${config.project.system_dir}/${config.project.temp_dir}
+        - Input files MUST be in configurable location specified by ${config.project.input_dir}
+        - Output files MUST be in configurable location specified by ${config.project.output_dir}
+
+    file_organization:
+        - Keep related files in dedicated subdirectories
+        - Use lowercase with hyphens for directory names
+        - Separate source code, tests, and resources
+        - Follow consistent naming patterns within directories
+
+    file_size:
+        - All code files MUST be less than ${config.project.max_file_lines} lines
+        - Break down large files into logical modules
+        - Use composition over large monolithic files
+
+    file_naming:
+        - Use lowercase with underscores for Python files
+        - Use descriptive names that reflect purpose
+        - Avoid generic names like "utils" or "helpers"
+        - Test files must start with "test_"

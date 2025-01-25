@@ -40,8 +40,9 @@ class TextConverter:
                 except UnicodeDecodeError as e:
                     last_error = e
                     continue
-                except UnicodeError as e:  # More specific than Exception
-                    last_error = e
+                except UnicodeError:  # More specific than Exception
+                    # Create a generic UnicodeDecodeError since we don't have the specific details
+                    last_error = UnicodeDecodeError('utf-8', b'', 0, 1, 'Unknown encoding error')
                     break
 
             if content is None:

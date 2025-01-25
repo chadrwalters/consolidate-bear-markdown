@@ -1,0 +1,8 @@
+# Package Management Rules
+
+rules:
+    package_management:
+        - Use uv ONLY
+        - Direct pip usage is FORBIDDEN
+        - Direct python/python3 usage is FORBIDDEN
+        - All Python commands must go through uv

@@ -1,0 +1,25 @@
+# Documentation Rules
+
+rules:
+    markdown_standards:
+        - Use ATX headers (# style) consistently
+        - Include table of contents for files longer than 100 lines
+        - Code blocks must specify language for syntax highlighting
+        - Links must use reference-style format for maintainability
+        - Images must include alt text for accessibility
+
+    api_documentation:
+        - All API endpoints must have OpenAPI/Swagger documentation
+        - Include request/response examples
+        - Document all possible response codes
+        - Specify required headers and authentication
+
+    code_documentation:
+        - Module-level docstrings must describe the module's purpose
+        - Class docstrings must describe the class's responsibility
+        - Function docstrings must include:
+            - Brief description
+            - Args with types
+            - Returns with types
+            - Raises with conditions
+        - Complex algorithms must include time/space complexity

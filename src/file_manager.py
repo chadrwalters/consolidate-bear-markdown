@@ -9,6 +9,8 @@ from typing import Dict, Optional, Set
 import urllib.parse
 import weakref
 
+from .progress_manager import ProgressManager
+
 logger = logging.getLogger(__name__)
 
 
@@ -47,6 +49,16 @@ class FileManager:
         self.resources: Dict[str, FileResource] = {}
         self._finalizer = weakref.finalize(self, self._cleanup)
         atexit.register(self.cleanup)
+
+        self.progress: Optional[ProgressManager] = None
+
+    def set_progress_manager(self, progress: ProgressManager) -> None:
+        """Set the progress manager for tracking.
+
+        Args:
+            progress: ProgressManager instance
+        """
+        self.progress = progress
 
     def get_stable_path(self, file_path: Path, subdir: str = "images") -> Path:
         """Get a stable path for a file in a subdirectory of .cbm.
@@ -321,3 +333,57 @@ class FileManager:
                 self.cleanup()
             except Exception:
                 pass  # Suppress errors during deletion
+
+    def count_attachments(self, md_file: Path) -> int:
+        """Count attachments for a markdown file.
+
+        Args:
+            md_file: Path to markdown file
+
+        Returns:
+            Number of attachments
+        """
+        attach_dir = md_file.parent / md_file.stem
+        if not attach_dir.exists():
+            return 0
+
+        return sum(1 for f in attach_dir.iterdir()
+                  if f.is_file() and not f.name.startswith('.'))
+
+    def process_attachments(self, md_file: Path) -> None:
+        """Process attachments with progress tracking.
+
+        Args:
+            md_file: Path to markdown file
+        """
+        if not self.progress:
+            return
+
+        # Count and setup progress
+        attach_count = self.count_attachments(md_file)
+        self.progress.start_attachment_progress(attach_count)
+
+        if attach_count == 0:
+            self.progress.write_message("  (No attachments)")
+            return
+
+        # Process each attachment
+        attach_dir = md_file.parent / md_file.stem
+        if attach_dir.exists():
+            for attachment in attach_dir.iterdir():
+                if attachment.is_file() and not attachment.name.startswith('.'):
+                    try:
+                        self._process_single_attachment(attachment)
+                        self.progress.update_attachment_progress()
+                    except Exception as e:
+                        logging.error(f"Error processing attachment {attachment}: {e}")
+                        self.progress.write_message(f"  Error with {attachment.name}: {str(e)}")
+
+    def _process_single_attachment(self, attachment: Path) -> None:
+        """Process a single attachment file.
+
+        Args:
+            attachment: Path to attachment file
+        """
+        # Existing attachment processing logic here
+        pass

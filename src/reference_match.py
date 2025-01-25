@@ -52,7 +52,7 @@ def find_markdown_references(content: str) -> List[ReferenceMatch]:
             except json.JSONDecodeError:
                 logger.warning(f"Invalid metadata for reference: {link_path}")
 
-        # A reference should be embedded unless explicitly set to false
+        # All references are embedded by default unless explicitly disabled
         embed = metadata.get("embed", True)
 
         ref = ReferenceMatch(

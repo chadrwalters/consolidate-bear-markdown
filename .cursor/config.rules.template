@@ -1,0 +1,28 @@
+# Core Configuration Rules - TEMPLATE
+# Copy this file to config.rules and modify for your project/environment
+
+config:
+    project:
+        # Directory for system files (e.g., ".project_files", ".system", etc.)
+        system_dir: "CHANGE_ME"
+
+        # Maximum lines allowed per file
+        max_file_lines: 250
+
+        # Directory structure
+        input_dir: "input"    # Where input files are stored
+        output_dir: "output"  # Where output files are generated
+        temp_dir: "temp"      # Temporary file storage
+        log_dir: "logs"       # Log file location
+
+    # Add other project-specific configurations here as needed
+    # Example:
+    # database:
+    #     host: "localhost"
+    #     port: 5432
+
+# Instructions:
+# 1. Copy this file to config.rules
+# 2. Replace CHANGE_ME values with your project-specific settings
+# 3. Add any additional configuration sections needed for your project
+# 4. Do not check in your config.rules file

@@ -45,6 +45,8 @@ htmlcov/
 .ruff_cache/
 .pdm-build/
 .benchmarks/
+.test_files/
+.cbm_test/
 
 # Nova specific
 logs/
@@ -91,3 +93,6 @@ $RECYCLE.BIN/
 
 # Local environment overrides
 .env.local
+
+# Cursor config
+.cursor/config.rules

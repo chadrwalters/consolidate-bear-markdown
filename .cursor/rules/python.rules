@@ -1,0 +1,25 @@
+# Python Best Practices Rules
+
+rules:
+    python_standards:
+        - Use Python 3.12+ features where applicable
+        - Type hints are REQUIRED for all function parameters and return types
+        - Use dataclasses for data structures
+        - Follow PEP 8 style guide strictly
+        - Use pathlib instead of os.path for file operations
+        - Use f-strings for string formatting
+        - Use context managers (with statements) for file and resource handling
+
+    code_quality:
+        - Maximum line length: 88 characters (Black formatter standard)
+        - Use Black for code formatting
+        - Use isort for import sorting
+        - Use pylint for linting
+        - Use mypy for type checking
+        - Docstrings required for all public functions and classes
+
+    error_handling:
+        - Use specific exception types instead of bare except clauses
+        - Always include error messages in exceptions
+        - Log exceptions with appropriate log levels
+        - Use custom exceptions for domain-specific errors

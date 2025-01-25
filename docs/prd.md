@@ -6,7 +6,7 @@ The consolidate-bear-markdown tool processes Markdown files and their associated
 
 A primary use case is processing files directly from cloud storage locations like iCloud Drive or Google Drive, making it seamless to work with Bear.app exports stored in the cloud.
 
-The tool integrates with OpenAI's GPT-4o model by default for enhanced image processing, providing rich descriptions and text extraction from visual content. This enables better accessibility and searchability of image content within the consolidated markdown files.
+The tool integrates with OpenAI's GPT-4o model by default for enhanced image processing, providing rich descriptions and text extraction from visual content. This enables better accessibility and searchability of image content within the consolidated markdown files. For users who don't need GPT-4o analysis, a --no_image flag is available to skip this step and use simple placeholders instead.
 
 The tool implements smart regeneration, only processing files that have changed since the last run, with an option to force regeneration when needed.
 
@@ -28,29 +28,67 @@ The tool implements smart regeneration, only processing files that have changed 
 
 ## 3. Functional Requirements
 
-### 3.1 Config File (config.toml)
-~~~~toml
+### 3.1 Configuration System
+
+The system uses a two-tier configuration approach:
+
+#### 3.1.1 Project Rules (.cursor/rules/)
+Modular, portable rule files that can be shared across projects:
+```
+.cursor/
+├── rules/
+│   ├── filesystem.rules    # File system organization rules
+│   ├── python.rules       # Python coding standards
+│   ├── documentation.rules # Documentation requirements
+│   ├── git.rules          # Git workflow rules
+│   └── ai_commands.rules  # AI-specific procedures
+├── config.rules           # Project-specific settings (not in VCS)
+└── config.rules.template  # Template for project configuration
+```
+
+#### 3.1.2 Project Configuration (.cursor/config.rules)
+Project-specific settings that shouldn't be version controlled:
+```yaml
+config:
+    project:
+        system_dir: ".cbm"  # Directory for system files
+        max_file_lines: 250  # Maximum lines per file
+        input_dir: "input"   # Directory for input files
+        output_dir: "output" # Directory for output files
+        temp_dir: "temp"     # Directory for temporary files
+        log_dir: "logs"      # Directory for log files
+
+    # Additional project-specific settings
+    # database:
+    #     host: "localhost"
+    #     port: 5432
+```
+
+#### 3.1.3 Legacy config.toml (Deprecated)
+The original TOML configuration is maintained for backward compatibility:
+```toml
 # Required settings
 srcDir = "/path/to/bear/markdown"
 destDir = "/path/to/output"
-openai_key = "your-api-key-here"  # Required for GPT-4o
+openai_key = "your-api-key-here"  # Required for GPT-4o unless --no_image is used
 cbm_dir = ".cbm"  # System files location
 
 # Optional settings
 logLevel = "WARNING"  # Default: WARNING (for performance metrics)
 force_generation = false  # Default: false
-image_analysis_prompt = """Custom prompt for GPT-4o"""
-~~~~
+no_image = false  # Default: false (can be overridden by --no_image flag)
+image_analysis_prompt = """Custom prompt for GPT-4o"""  # Ignored if no_image=true
+```
 
 ### 3.2 Performance Monitoring
-- Comprehensive timing metrics at WARNING level:
+- Comprehensive timing metrics at DEBUG level (moved from WARNING):
   ```
-  [WARNING] Entering function: process_markdown_file
-  [WARNING] Starting block: Processing reference: image.png
-  [WARNING] Starting block: GPT-4o analysis for image.png
-  [WARNING] Finished block: GPT-4o analysis | Elapsed: 2.4321 seconds
-  [WARNING] Finished block: Processing reference | Elapsed: 2.5432 seconds
-  [WARNING] Exiting function: process_markdown_file | Elapsed: 2.6543 seconds
+  [DEBUG] Entering function: process_markdown_file
+  [DEBUG] Starting block: Processing reference: image.png
+  [DEBUG] Starting block: GPT-4o analysis for image.png
+  [DEBUG] Finished block: GPT-4o analysis | Elapsed: 2.4321 seconds
+  [DEBUG] Finished block: Processing reference | Elapsed: 2.5432 seconds
+  [DEBUG] Exiting function: process_markdown_file | Elapsed: 2.6543 seconds
   ```
 - Function-level timing via decorators
 - Block-level timing via context managers
@@ -90,6 +128,10 @@ image_analysis_prompt = """Custom prompt for GPT-4o"""
 
 ### 3.5 Image Processing
 - GPT-4o integration for image analysis
+  - Optional processing with --no_image flag
+  - Simple placeholder generation when GPT-4o is skipped
+  - Placeholder includes image dimensions and file size
+  - Tracking of skipped images in processing stats
 - Image format conversion support:
   - SVG → PNG via svglib (ReportLab)
   - HEIC/HEIF → JPG
@@ -99,7 +141,7 @@ image_analysis_prompt = """Custom prompt for GPT-4o"""
 - Performance metrics for:
   - Format conversion operations
   - Cache lookups and storage
-  - GPT-4o analysis
+  - GPT-4o analysis (when not skipped)
   - Overall processing time
 
 ### 3.6 Progress Tracking
@@ -118,6 +160,7 @@ image_analysis_prompt = """Custom prompt for GPT-4o"""
   │ ┡━━━━━━━━━━━━━╇━━━━━━━╇━━━━━━━━━╇━━━━━━━╇━━━━━━━━━┩      │
   │ │ Files       │    10 │       8 │     1 │       1 │      │
   │ │ Attachments │    25 │      20 │     3 │       2 │      │
+  │ │ Images Skip │     5 │      -- │    -- │      -- │      │
   │ └─────────────┴───────┴─────────┴───────┴─────────┘      │
   ╰──────────────────────────────────────────────────────────╯
 
@@ -126,10 +169,33 @@ image_analysis_prompt = """Custom prompt for GPT-4o"""
   - Average per File: 4.532s
   - Cache Hit Rate: 85%
   - Slowest Operations:
-    - GPT-4o Analysis: 35.123s
+    - GPT-4o Analysis: 35.123s (or "Skipped" if --no_image used)
     - Image Conversion: 8.765s
     - Cache Operations: 1.433s
   ```
+
+### 3.7 Progress Tracking System
+- Nested progress bars using tqdm:
+  ```
+  Processing Markdown Files: 45%|████▌     | 9/20 [00:25<00:30, 2.75s/file]
+    • Processing "Resume.md" ...
+    Attachments: 60%|██████    | 3/5 [00:15<00:10, 5.00s/att]
+  ```
+- Console output levels:
+  - WARNING: Default console level for critical messages
+  - DEBUG: Detailed timing logs in .cbm/logs/debug.log
+- Final summary display:
+  ```
+  ╭───────────────────── Processing Complete ─────────────────────╮
+  │  Category      Total   Success   Error   Skipped             │
+  │  Files         20      18        1       1                   │
+  │  Attachments   85      80        3       2                   │
+  ╰──────────────────────────────────────────────────────────────╯
+  ```
+- Edge case handling:
+  - Zero-attachment files: Shows "(No attachments)" message
+  - Error states: Continues progress while logging errors
+  - Multiple attachments: Maintains bar clarity with tqdm
 
 ## 4. Non-Functional Requirements
 

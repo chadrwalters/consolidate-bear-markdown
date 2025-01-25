@@ -35,12 +35,19 @@ ConverterType = Union[
 class ConverterFactory:
     """Factory for creating and managing file converters."""
 
-    def __init__(self, *, cbm_dir: Path, openai_client: Optional[OpenAI] = None):
+    def __init__(
+        self,
+        *,
+        cbm_dir: Path,
+        openai_client: Optional[OpenAI] = None,
+        no_image: bool = False
+    ):
         """Initialize the converter factory.
 
         Args:
             cbm_dir: Directory for system files and processing
             openai_client: Optional OpenAI client for AI-powered conversions
+            no_image: If True, skip GPT-4o vision analysis for images
 
         Raises:
             ValueError: If openai_client is None but required by a converter
@@ -60,7 +67,11 @@ class ConverterFactory:
         # Add image converter only if we have an OpenAI client
         if openai_client is not None:
             converters.append(
-                ImageConverter(openai_client=openai_client, cbm_dir=cbm_dir)
+                ImageConverter(
+                    openai_client=openai_client,
+                    cbm_dir=cbm_dir,
+                    skip_vision=no_image
+                )
             )
         else:
             logger.warning(

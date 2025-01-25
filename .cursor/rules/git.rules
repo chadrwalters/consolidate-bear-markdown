@@ -1,0 +1,22 @@
+# Git Workflow Rules
+
+rules:
+    commit_standards:
+        - Use conventional commits format (type: description)
+        - Types: feat, fix, docs, style, refactor, test, chore
+        - Keep commits atomic and focused
+        - Commit messages must be descriptive and in present tense
+        - Reference issues in commits where applicable
+
+    branch_management:
+        - Use feature branches for all new work
+        - Branch naming: type/description (e.g., feat/add-markdown-processor)
+        - Keep branches up to date with main
+        - Delete branches after merging
+
+    pull_requests:
+        - Include description of changes
+        - Link related issues
+        - Update documentation if needed
+        - Ensure all tests pass
+        - Request review from at least one team member
